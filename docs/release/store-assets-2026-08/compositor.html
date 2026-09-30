@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>AirQR store assets</title>
+    <style>
+      @font-face {
+        font-family: Manrope;
+        src: url("./source/fonts/Manrope-variable.ttf") format("truetype");
+        font-weight: 200 800;
+        font-style: normal;
+        font-display: block;
+      }
+
+      :root {
+        --bg: #0b141f;
+        --ink: #ffffff;
+        --bezel: #101113;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        background: #111;
+        color: var(--ink);
+        font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
+        font-synthesis: none;
+        text-rendering: geometricPrecision;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .canvas {
+        position: relative;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--ink);
+      }
+
+      .canvas.feature {
+        width: 1024px;
+        height: 500px;
+      }
+
+      .canvas.play {
+        width: 1080px;
+        height: 1920px;
+      }
+
+      .canvas.store {
+        width: 1290px;
+        height: 2796px;
+      }
+
+      .pad {
+        position: relative;
+        z-index: 1;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .play .pad,
+      .store .pad {
+        align-items: center;
+        text-align: center;
+      }
+
+      /* Measured from Snapchat store slide: 3.8% top/bottom, 11.06% sides */
+      .play .pad {
+        padding: 73px 119px 73px;
+      }
+
+      .store .pad {
+        padding: 106px 143px 106px;
+      }
+
+      .play h1,
+      .store h1 {
+        flex: 0 0 auto;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        line-height: 1;
+      }
+
+      .play h1 {
+        font-size: 100px;
+      }
+
+      .store h1 {
+        font-size: 146px;
+      }
+
+      .lede {
+        flex: 0 0 auto;
+        color: rgb(255 255 255 / 0.88);
+        font-weight: 500;
+        line-height: 1;
+        letter-spacing: -0.02em;
+      }
+
+      .play .lede {
+        margin-top: 18px;
+        font-size: 32px;
+      }
+
+      .store .lede {
+        margin-top: 26px;
+        font-size: 47px;
+      }
+
+      .shot {
+        flex: 1;
+        width: 100%;
+        min-height: 0;
+        overflow: hidden;
+        background: #0b141f;
+        box-shadow: 0 16px 40px rgb(0 0 0 / 0.35);
+      }
+
+      .play .shot {
+        margin-top: 113px;
+        border-radius: 52px;
+      }
+
+      .store .shot {
+        margin-top: 165px;
+        border-radius: 62px;
+      }
+
+      .shot img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top center;
+        display: block;
+      }
+
+      .feature .pad {
+        padding: 0;
+      }
+
+      .feature-scene {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0b141f;
+      }
+
+      .feature-scene::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        background:
+          linear-gradient(90deg, rgb(11 20 31 / 0.96) 0 360px, rgb(11 20 31 / 0.42) 560px, transparent 720px),
+          linear-gradient(180deg, transparent 72%, rgb(11 20 31 / 0.32) 100%);
+      }
+
+      .feature-laptop {
+        position: absolute;
+        right: -8px;
+        top: 68px;
+        width: 430px;
+        height: 344px;
+        object-fit: contain;
+        object-position: right center;
+        filter: saturate(0.96) contrast(1.02);
+      }
+
+      .feature-phone {
+        position: absolute;
+        left: 508px;
+        bottom: -96px;
+        height: 328px;
+        transform: rotate(-8deg);
+        z-index: 2;
+        filter: drop-shadow(0 26px 24px rgb(0 0 0 / 0.55));
+      }
+
+      .feature-phone .phone {
+        height: 100%;
+        width: auto;
+        aspect-ratio: 9 / 19.5;
+        padding: 8px;
+        border-radius: 34px;
+        background: linear-gradient(180deg, #2a323b, var(--bezel));
+      }
+
+      .feature-phone .screen {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        border-radius: 26px;
+        background: #0b141f;
+      }
+
+      .feature-phone .screen img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top center;
+        display: block;
+      }
+
+      .feature-brand {
+        position: absolute;
+        left: 40px;
+        top: 48px;
+        z-index: 3;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        max-width: 430px;
+      }
+
+      .feature-brand .wordmark {
+        margin: 0;
+        font-size: 24px;
+      }
+
+      .feature-brand .wordmark img {
+        width: 32px;
+        height: 32px;
+      }
+
+      .feature-brand h1 {
+        font-size: 36px;
+        font-weight: 800;
+        letter-spacing: -0.035em;
+        line-height: 1.1;
+        max-width: 16ch;
+        color: #fff;
+      }
+
+      .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 22px;
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+
+      .wordmark img {
+        width: 48px;
+        height: 48px;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="canvas feature" data-id="feature-graphic-1024x500">
+      <div class="pad">
+        <div class="feature-scene">
+          <img class="feature-laptop" src="./source/pc-feature.png" alt="" />
+          <div class="feature-phone">
+            <div class="phone">
+              <div class="screen">
+                <img src="./source/iphone-scanner.png" alt="" />
+              </div>
+            </div>
+          </div>
+          <div class="feature-brand">
+            <div class="wordmark">
+              <img src="./source/logo.svg" alt="" />
+              AirQR
+            </div>
+            <h1>Transférez des données d’un appareil à un autre, totalement hors ligne.</h1>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="canvas play" data-id="play-01-scanner">
+      <div class="pad">
+        <h1>Scannez</h1>
+        <p class="lede">Pointez le téléphone vers l’écran.</p>
+        <div class="shot">
+          <img src="./source/iphone-scanner.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="canvas play" data-id="play-02-encode">
+      <div class="pad">
+        <h1>Encodez</h1>
+        <p class="lede">Un QR animé. L’autre appareil lit.</p>
+        <div class="shot">
+          <img src="./source/iphone-encode-result.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="canvas play" data-id="play-03-history">
+      <div class="pad">
+        <h1>Reprenez</h1>
+        <p class="lede">Un transfert incomplet reste ici.</p>
+        <div class="shot">
+          <img src="./source/iphone-history.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="canvas play" data-id="play-04-file">
+      <div class="pad">
+        <h1>Envoyez</h1>
+        <p class="lede">Fichier, dossier ou note.</p>
+        <div class="shot">
+          <img src="./source/iphone-encode-file.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="canvas play" data-id="play-05-offline">
+      <div class="pad">
+        <h1>Synchronisez</h1>
+        <p class="lede">Entre vos appareils.</p>
+        <div class="shot">
+          <img src="./source/iphone-settings.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="canvas store" data-id="ios-01-scanner">
+      <div class="pad">
+        <h1>Scannez</h1>
+        <p class="lede">Pointez le téléphone vers l’écran.</p>
+        <div class="shot">
+          <img src="./source/iphone-scanner.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="canvas store" data-id="ios-02-encode">
+      <div class="pad">
+        <h1>Encodez</h1>
+        <p class="lede">Un QR animé. L’autre appareil lit.</p>
+        <div class="shot">
+          <img src="./source/iphone-encode-result.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="canvas store" data-id="ios-03-history">
+      <div class="pad">
+        <h1>Reprenez</h1>
+        <p class="lede">Un transfert incomplet reste ici.</p>
+        <div class="shot">
+          <img src="./source/iphone-history.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="canvas store" data-id="ios-04-file">
+      <div class="pad">
+        <h1>Envoyez</h1>
+        <p class="lede">Fichier, dossier ou note.</p>
+        <div class="shot">
+          <img src="./source/iphone-encode-file.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="canvas store" data-id="ios-05-offline">
+      <div class="pad">
+        <h1>Synchronisez</h1>
+        <p class="lede">Entre vos appareils.</p>
+        <div class="shot">
+          <img src="./source/iphone-settings.png" alt="" />
+        </div>
+      </div>
+    </section>
+  </body>
+</html>

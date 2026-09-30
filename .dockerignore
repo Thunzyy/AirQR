@@ -1,0 +1,70 @@
+# Git
+.git/
+.gitignore
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+.pub-cache/
+.pub/
+
+# Build artifacts
+target/
+dist/
+build/
+artifacts/
+tmp/
+tmp-pytest/
+.tmp-pytest/
+
+# IDE / editor
+.vscode/
+.idea/
+*.iml
+
+# Claude / AI tooling
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+
+# Tests
+tests/
+.pytest_cache/
+*.pyc
+__pycache__/
+playwright-report/
+test-results/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Flutter (not needed for Docker)
+apps/flutter/
+
+# Media / dev artifacts
+*.gif
+*.mp4
+*.mkv
+*.png
+*.pem
+*.log
+*.html
+
+# Required for the frontend build inside the Docker context
+!apps/web/index.html
+!apps/web/public/**/*.html
+!apps/web/public/**/*.png
+!apps/web/public/**/*.ico
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tools
+tools/

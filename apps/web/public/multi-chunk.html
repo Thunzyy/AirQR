@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-View - AirQR</title>
+
+  <link rel="stylesheet" href="/fonts.css">
+
+  <style>
+    /* ==========================================
+       CSS Variables (Flutter design system)
+       ========================================== */
+    :root {
+      --primary: #137fec;
+      --primary-hover: #1a8fff;
+      --background-dark: #0B141F;
+      --surface-dark: #1E2933;
+      --border-dark: #2b3540;
+      --airqr-nav-surface: rgba(9, 13, 18, 0.76);
+      --airqr-nav-active: rgba(54, 54, 54, 0.74);
+      --airqr-card-surface: rgba(54, 68, 82, 0.74);
+      --text-primary: #ffffff;
+      --text-secondary: #9dabb9;
+      --success: #22c55e;
+      --warning: #f97316;
+      --error: #ef4444;
+      --toolbar-height: 58px;
+    }
+
+    /* ==========================================
+       Reset & Base
+       ========================================== */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background:
+        radial-gradient(ellipse 120% 65% at 50% -16%, rgba(170, 205, 232, 0.8) 0%, rgba(88, 124, 154, 0.64) 28%, transparent 62%),
+        linear-gradient(138deg, #08101a 0%, #183044 42%, #0a1723 78%, #05090e 100%);
+      color: var(--text-primary);
+      min-height: 100dvh;
+      overflow: hidden;
+    }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
+    /* ==========================================
+       Header
+       ========================================== */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      height: var(--toolbar-height);
+      background: rgba(9, 13, 18, 0.58);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 0;
+    }
+
+    .qr-viewer-toolbar {
+      box-shadow: none;
+    }
+
+    .header-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 100%;
+      padding: 8px 14px;
+      max-width: 100%;
+      gap: 12px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .header-content::-webkit-scrollbar {
+      display: none;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .header h1 {
+      max-width: min(34vw, 520px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .chunk-badge {
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: var(--airqr-nav-active);
+      color: var(--text-primary);
+      border-radius: 9999px;
+    }
+
+    .header-center {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .per-page-selector {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .per-page-selector label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .per-page-selector select {
+      background: var(--airqr-nav-surface);
+      color: var(--text-primary);
+      border: 0;
+      border-radius: 999px;
+      padding: 6px 9px;
+      font-size: 0.85rem;
+      font-family: inherit;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .per-page-selector select:hover {
+      background: var(--airqr-nav-active);
+    }
+
+    .per-page-selector select:focus {
+      box-shadow: none;
+    }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pagination-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      border: 0;
+      background: var(--airqr-nav-surface);
+      color: var(--text-primary);
+      cursor: pointer;
+      box-shadow: none;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    .pagination-btn:hover:not(:disabled) {
+      background: var(--airqr-nav-active);
+    }
+
+    .pagination-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .pagination-info {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      min-width: 80px;
+      text-align: center;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .icon-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      border: 0;
+      background: var(--airqr-nav-surface);
+      color: var(--text-primary);
+      cursor: pointer;
+      box-shadow: none;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    .icon-btn:hover {
+      background: var(--airqr-nav-active);
+    }
+
+    .icon-btn.active {
+      background: var(--airqr-nav-active);
+      color: var(--text-primary);
+    }
+
+    /* ==========================================
+       Main Canvas
+       ========================================== */
+    .canvas {
+      position: relative;
+      width: 100%;
+      height: calc(100dvh - var(--toolbar-height));
+      overflow: auto;
+    }
+
+
+    /* ==========================================
+       States (Loading, Error)
+       ========================================== */
+    .state-container {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .state-container.hidden {
+      display: none;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(19, 127, 236, 0.3);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .state-text {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+
+    .error-icon {
+      font-size: 64px;
+      color: var(--error);
+    }
+
+    .close-btn {
+      padding: 8px 16px;
+      background: var(--surface-dark);
+      color: var(--text-primary);
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .close-btn:hover {
+      background: var(--border-dark);
+    }
+
+    /* ==========================================
+       Cards Container
+       ========================================== */
+    .cards-container {
+      position: relative;
+      width: 100%;
+      min-height: 100%;
+      padding: 16px;
+    }
+
+    .cards-container.hidden {
+      display: none;
+    }
+
+    /* ==========================================
+       QR Card
+       ========================================== */
+    .qr-card {
+      position: absolute;
+      background: var(--airqr-card-surface);
+      border: 0;
+      border-radius: 24px;
+      overflow: hidden;
+      min-width: 150px;
+      min-height: 180px;
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      transition: background-color 0.2s, transform 0.2s;
+      user-select: none;
+      cursor: grab;
+    }
+
+    .qr-viewer-card {
+      background: var(--airqr-card-surface);
+      box-shadow: none;
+    }
+
+    .qr-card:hover {
+      background: rgba(61, 76, 91, 0.78);
+      transform: translateY(-1px);
+      z-index: 10;
+    }
+
+    .qr-card.active {
+      background: rgba(61, 76, 91, 0.82);
+      box-shadow: none;
+      z-index: 20;
+      cursor: grabbing;
+    }
+
+    .qr-card.resizing {
+      background: rgba(61, 76, 91, 0.84);
+      box-shadow: none;
+      z-index: 30;
+    }
+
+    /* Header bar */
+    .qr-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      border-bottom: 0;
+      background: transparent;
+      flex-shrink: 0;
+    }
+
+    .frame-info {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-family: 'Manrope', monospace;
+    }
+
+    .frame-info .min-required {
+      color: var(--success);
+      font-size: 0.7rem;
+      margin-left: 6px;
+    }
+
+    .open-viewer-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      border: none;
+      background: var(--airqr-nav-surface);
+      color: var(--text-primary);
+      cursor: pointer;
+      box-shadow: none;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    .open-viewer-btn:hover {
+      background: var(--airqr-nav-active);
+      color: var(--text-primary);
+    }
+
+    .open-viewer-btn .material-symbols-outlined {
+      font-size: 18px;
+    }
+
+    /* QR container - CRITICAL: image must scale with container */
+    .qr-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: white;
+      margin: 7px;
+      border-radius: 8px;
+      min-height: 0;
+      overflow: hidden;
+      padding: 7px;
+      position: relative;
+    }
+
+    .qr-container canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      image-rendering: pixelated;
+    }
+
+    .qr-container .loading-icon {
+      color: #9ca3af;
+      font-size: 36px;
+    }
+
+
+    /* Footer */
+    .qr-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      border-top: 0;
+      background: transparent;
+      flex-shrink: 0;
+    }
+
+    .chunk-info {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    /* Resize handle */
+    .resize-handle {
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      width: 20px;
+      height: 20px;
+      cursor: nwse-resize;
+      opacity: 0;
+      transition: opacity 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 4px;
+    }
+
+    .qr-card:hover .resize-handle,
+    .qr-card.resizing .resize-handle {
+      opacity: 1;
+    }
+
+    /* ==========================================
+       Scrollbar
+       ========================================== */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-dark);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3b4754;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header qr-viewer-toolbar">
+    <div class="header-content">
+      <div class="header-left">
+        <h1>Grille de QR Codes</h1>
+        <span id="chunkCount" class="chunk-badge">0 chunks</span>
+      </div>
+
+      <div class="header-center">
+        <div class="per-page-selector">
+          <label for="perPage">Afficher:</label>
+          <select id="perPage">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4" selected>4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+            <option value="12">12</option>
+            <option value="15">15</option>
+            <option value="20">20</option>
+            <option value="all">Tous</option>
+          </select>
+        </div>
+
+        <div class="pagination">
+          <button id="prevPage" class="pagination-btn" title="Page précédente">
+            <span class="material-symbols-outlined" style="font-size: 18px;">chevron_left</span>
+          </button>
+          <span id="pageInfo" class="pagination-info">1 / 1</span>
+          <button id="nextPage" class="pagination-btn" title="Page suivante">
+            <span class="material-symbols-outlined" style="font-size: 18px;">chevron_right</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <button id="toggleGrid" class="icon-btn active" title="Disposition automatique">
+          <span class="material-symbols-outlined">grid_4x4</span>
+        </button>
+        <button id="resetLayout" class="icon-btn" title="Réinitialiser">
+          <span class="material-symbols-outlined">restart_alt</span>
+        </button>
+        <button id="fullscreen" class="icon-btn" title="Plein écran">
+          <span class="material-symbols-outlined">fullscreen</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main canvas area -->
+  <main id="canvas" class="canvas">
+    <!-- Loading state -->
+    <div id="loadingState" class="state-container">
+      <div class="spinner"></div>
+      <p class="state-text">Chargement des chunks...</p>
+    </div>
+
+    <!-- Error state -->
+    <div id="errorState" class="state-container hidden">
+      <span class="material-symbols-outlined error-icon">error</span>
+      <p class="state-text" id="errorMessage">Erreur de chargement</p>
+      <button onclick="window.close()" class="close-btn">Fermer</button>
+    </div>
+
+    <!-- Cards container -->
+    <div id="cardsContainer" class="cards-container hidden">
+      <!-- Cards will be inserted here -->
+    </div>
+  </main>
+
+  <script>
+    // ===========================================
+    // IndexedDB Operations
+    // ===========================================
+
+    const DB_NAME = 'airqr-multiview';
+    const DB_VERSION = 1;
+    const STORE_NAME = 'sessions';
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+        request.onupgradeneeded = (event) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            const store = db.createObjectStore(STORE_NAME, { keyPath: 'sessionId' });
+            store.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+        };
+      });
+    }
+
+    async function loadMultiviewSession(sessionId) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.get(sessionId);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result || null);
+        tx.oncomplete = () => db.close();
+      });
+    }
+
+    function chunkToBlobUrl(chunk) {
+      const blob = new Blob([new Uint8Array(chunk.data)], { type: chunk.mimeType });
+      return URL.createObjectURL(blob);
+    }
+
+    // ===========================================
+    // State
+    // ===========================================
+
+    let state = {
+      sessionId: null,
+      total: 0,
+      chunks: [],
+      showGrid: false,
+      autoLayout: true,
+      perPage: 4,
+      currentPage: 0,
+      filename: null,
+      chunkMinFrames: [],
+      createdAt: null,
+    };
+
+    // ===========================================
+    // DOM Elements
+    // ===========================================
+
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
+    const errorMessage = document.getElementById('errorMessage');
+    const cardsContainer = document.getElementById('cardsContainer');
+    const canvas = document.getElementById('canvas');
+    const chunkCountEl = document.getElementById('chunkCount');
+    const toggleGridBtn = document.getElementById('toggleGrid');
+    const resetLayoutBtn = document.getElementById('resetLayout');
+    const fullscreenBtn = document.getElementById('fullscreen');
+    const perPageSelect = document.getElementById('perPage');
+    const prevPageBtn = document.getElementById('prevPage');
+    const nextPageBtn = document.getElementById('nextPage');
+    const pageInfoEl = document.getElementById('pageInfo');
+
+    // ===========================================
+    // Initialization
+    // ===========================================
+
+    async function init() {
+      const params = new URLSearchParams(window.location.search);
+      const sessionId = params.get('session');
+
+      if (!sessionId) {
+        showError("Session ID manquant. Ouvrez cette page depuis l'application AirQR.");
+        return;
+      }
+
+      state.sessionId = sessionId;
+
+      try {
+        const session = await loadMultiviewSession(sessionId);
+
+        if (!session) {
+          showError('Session non trouvee ou expiree.');
+          return;
+        }
+
+        state.total = session.chunks.length;
+        state.createdAt = session.createdAt;
+
+        // Load metadata from session
+        if (session.metadata) {
+          state.filename = session.metadata.filename || null;
+          state.chunkMinFrames = session.metadata.chunkMinFrames || [];
+        }
+        state.chunks = session.chunks.map((chunk, index) => ({
+          id: chunk.id,
+          blobUrl: null,
+          status: 'loading',
+          width: 280,
+          height: 340,
+          x: 0,
+          y: 0,
+          data: chunk.data,
+          mimeType: chunk.mimeType,
+          error: null,
+        }));
+
+        // Show cards container
+        loadingState.classList.add('hidden');
+        cardsContainer.classList.remove('hidden');
+
+        // Update header info
+        chunkCountEl.textContent = `${state.total} chunks`;
+
+        // Update title with filename if available
+        if (state.filename) {
+          document.querySelector('.header h1').textContent = state.filename;
+          document.title = `${state.filename} - Multi-View - AirQR`;
+        }
+
+        // Load blob URLs first
+        await loadChunkBlobs();
+
+        // Render current page
+        renderCurrentPage();
+
+      } catch (error) {
+        console.error('Failed to load session:', error);
+        showError('Erreur lors du chargement de la session.');
+      }
+    }
+
+    function showError(message) {
+      loadingState.classList.add('hidden');
+      errorState.classList.remove('hidden');
+      errorMessage.textContent = message;
+    }
+
+    async function loadChunkBlobs() {
+      for (const chunk of state.chunks) {
+        try {
+          chunk.blobUrl = chunkToBlobUrl({ data: chunk.data, mimeType: chunk.mimeType });
+          chunk.status = 'loaded';
+        } catch (error) {
+          chunk.status = 'error';
+          chunk.error = error.message;
+        }
+      }
+    }
+
+    // ===========================================
+    // Pagination
+    // ===========================================
+
+    function getVisibleChunks() {
+      if (state.perPage === 'all' || state.perPage >= state.total) {
+        return state.chunks;
+      }
+      const start = state.currentPage * state.perPage;
+      return state.chunks.slice(start, start + state.perPage);
+    }
+
+    function getTotalPages() {
+      if (state.perPage === 'all' || state.perPage >= state.total) {
+        return 1;
+      }
+      return Math.ceil(state.total / state.perPage);
+    }
+
+    function updatePaginationUI() {
+      const totalPages = getTotalPages();
+      pageInfoEl.textContent = `${state.currentPage + 1} / ${totalPages}`;
+      prevPageBtn.disabled = state.currentPage <= 0;
+      nextPageBtn.disabled = state.currentPage >= totalPages - 1;
+    }
+
+    function calculatePositions(chunks) {
+      const containerWidth = canvas.clientWidth - 40; // padding
+      const cardWidth = 280;
+      const cardHeight = 340;
+      const gap = 20;
+
+      const cols = Math.max(1, Math.floor((containerWidth + gap) / (cardWidth + gap)));
+
+      chunks.forEach((chunk, index) => {
+        const col = index % cols;
+        const row = Math.floor(index / cols);
+        chunk.x = col * (cardWidth + gap);
+        chunk.y = row * (cardHeight + gap);
+        chunk.width = cardWidth;
+        chunk.height = cardHeight;
+      });
+    }
+
+    function renderCurrentPage() {
+      const visibleChunks = getVisibleChunks();
+      calculatePositions(visibleChunks);
+      renderCards(visibleChunks);
+      updatePaginationUI();
+
+      // Re-apply auto layout if enabled (after cards are rendered)
+      if (state.autoLayout) {
+        setTimeout(() => applyAutoLayout(), 0);
+      }
+    }
+
+    // ===========================================
+    // Rendering
+    // ===========================================
+
+    function renderCards(chunks) {
+      // Stop all existing GIF players
+      gifPlayers.forEach((_, chunkId) => stopGifPlayer(chunkId));
+
+      cardsContainer.innerHTML = '';
+
+      chunks.forEach((chunk) => {
+        const card = createCard(chunk);
+        cardsContainer.appendChild(card);
+      });
+    }
+
+    function createCard(chunk) {
+      const card = document.createElement('div');
+      card.className = "qr-card qr-viewer-card";
+      card.id = `card-${chunk.id}`;
+      card.style.left = `${chunk.x}px`;
+      card.style.top = `${chunk.y}px`;
+      card.style.width = `${chunk.width}px`;
+      card.style.height = `${chunk.height}px`;
+
+      card.innerHTML = `
+        <div class="qr-header">
+          <span class="frame-info" id="frame-${chunk.id}">Frame -/-</span>
+          <button class="open-viewer-btn" title="Ouvrir dans le viewer" data-chunk-id="${chunk.id}">
+            <span class="material-symbols-outlined">open_in_new</span>
+          </button>
+        </div>
+
+        <div class="qr-container">
+          ${chunk.blobUrl
+            ? `<canvas id="canvas-${chunk.id}"></canvas>`
+            : '<span class="material-symbols-outlined loading-icon">hourglass_empty</span>'
+          }
+        </div>
+
+        <div class="qr-footer">
+          <span class="chunk-info">Chunk ${chunk.id + 1}/${state.total}</span>
+        </div>
+
+        <div class="resize-handle" aria-label="Redimensionner">
+          <span class="material-symbols-outlined" style="font-size: 14px;">south_east</span>
+        </div>
+      `;
+
+      attachCardEvents(card, chunk);
+
+      // Initialize GIF player after card is in DOM
+      if (chunk.blobUrl) {
+        setTimeout(() => initGifPlayer(chunk), 0);
+      }
+
+      return card;
+    }
+
+    function getStatusTitle(status) {
+      switch (status) {
+        case 'loading': return 'Chargement...';
+        case 'loaded': return 'GIF chargé';
+        case 'error': return 'Erreur de chargement';
+        default: return '';
+      }
+    }
+
+    // ===========================================
+    // Card Interactions
+    // ===========================================
+
+    function attachCardEvents(card, chunk) {
+      const resizeHandle = card.querySelector('.resize-handle');
+      const openViewerBtn = card.querySelector('.open-viewer-btn');
+
+      // Open in GIF viewer
+      openViewerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openGifViewer(chunk.id);
+      });
+
+      // Drag to move
+      card.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.resize-handle') || e.target.closest('.open-viewer-btn')) return;
+        startDrag(e, chunk, card);
+      });
+
+      // Resize
+      resizeHandle.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        startResize(e, chunk, card);
+      });
+
+      // Touch support
+      card.addEventListener('touchstart', (e) => {
+        if (e.target.closest('.resize-handle') || e.target.closest('.open-viewer-btn')) return;
+        startDrag(e.touches[0], chunk, card);
+      }, { passive: false });
+
+      resizeHandle.addEventListener('touchstart', (e) => {
+        e.stopPropagation();
+        startResize(e.touches[0], chunk, card);
+      }, { passive: false });
+    }
+
+    // ===========================================
+    // Drag Implementation
+    // ===========================================
+
+    let dragState = null;
+
+    function startDrag(e, chunk, card) {
+      e.preventDefault();
+      card.classList.add('active');
+
+      dragState = {
+        type: 'move',
+        chunkId: chunk.id,
+        card,
+        startX: e.clientX,
+        startY: e.clientY,
+        origX: chunk.x,
+        origY: chunk.y,
+      };
+
+      document.addEventListener('mousemove', onDrag);
+      document.addEventListener('mouseup', stopDrag);
+      document.addEventListener('touchmove', onTouchDrag, { passive: false });
+      document.addEventListener('touchend', stopDrag);
+    }
+
+    function onDrag(e) {
+      if (!dragState || dragState.type !== 'move') return;
+
+      const dx = e.clientX - dragState.startX;
+      const dy = e.clientY - dragState.startY;
+
+      const chunk = state.chunks.find(c => c.id === dragState.chunkId);
+      if (chunk) {
+        chunk.x = Math.max(0, dragState.origX + dx);
+        chunk.y = Math.max(0, dragState.origY + dy);
+        dragState.card.style.left = `${chunk.x}px`;
+        dragState.card.style.top = `${chunk.y}px`;
+      }
+    }
+
+    function onTouchDrag(e) {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        onDrag(e.touches[0]);
+      }
+    }
+
+    function stopDrag() {
+      if (dragState) {
+        dragState.card.classList.remove('active');
+        dragState = null;
+      }
+
+      document.removeEventListener('mousemove', onDrag);
+      document.removeEventListener('mouseup', stopDrag);
+      document.removeEventListener('touchmove', onTouchDrag);
+      document.removeEventListener('touchend', stopDrag);
+    }
+
+    // ===========================================
+    // Resize Implementation
+    // ===========================================
+
+    let resizeState = null;
+
+    function startResize(e, chunk, card) {
+      e.preventDefault();
+      card.classList.add('resizing');
+
+      resizeState = {
+        type: 'resize',
+        chunkId: chunk.id,
+        card,
+        startX: e.clientX,
+        startY: e.clientY,
+        origWidth: chunk.width,
+        origHeight: chunk.height,
+      };
+
+      document.addEventListener('mousemove', onResize);
+      document.addEventListener('mouseup', stopResize);
+      document.addEventListener('touchmove', onTouchResize, { passive: false });
+      document.addEventListener('touchend', stopResize);
+    }
+
+    function onResize(e) {
+      if (!resizeState) return;
+
+      const dx = e.clientX - resizeState.startX;
+      const dy = e.clientY - resizeState.startY;
+
+      const chunk = state.chunks.find(c => c.id === resizeState.chunkId);
+      if (chunk) {
+        const newWidth = Math.max(150, resizeState.origWidth + dx);
+        const newHeight = Math.max(180, resizeState.origHeight + dy);
+
+        chunk.width = Math.min(newWidth, window.innerWidth * 0.9);
+        chunk.height = Math.min(newHeight, window.innerHeight * 0.9);
+
+        resizeState.card.style.width = `${chunk.width}px`;
+        resizeState.card.style.height = `${chunk.height}px`;
+      }
+    }
+
+    function onTouchResize(e) {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        onResize(e.touches[0]);
+      }
+    }
+
+    function stopResize() {
+      if (resizeState) {
+        resizeState.card.classList.remove('resizing');
+        resizeState = null;
+      }
+
+      document.removeEventListener('mousemove', onResize);
+      document.removeEventListener('mouseup', stopResize);
+      document.removeEventListener('touchmove', onTouchResize);
+      document.removeEventListener('touchend', stopResize);
+    }
+
+    // ===========================================
+    // Open GIF Viewer
+    // ===========================================
+
+    function openGifViewer(chunkId) {
+      const params = new URLSearchParams();
+      params.set('session', state.sessionId);
+      params.set('chunk', chunkId.toString());
+
+      // Add filename if available
+      if (state.filename) {
+        if (state.total > 1) {
+          params.set('filename', `${state.filename} - Chunk ${chunkId + 1}`);
+        } else {
+          params.set('filename', state.filename);
+        }
+      }
+
+      // Add minFrames for this specific chunk
+      const minFrames = state.chunkMinFrames[chunkId];
+      if (minFrames && minFrames > 0) {
+        params.set('minFrames', minFrames.toString());
+      }
+
+      // Add timestamp from session creation
+      if (state.createdAt) {
+        params.set('timestamp', new Date(state.createdAt).toLocaleString());
+      }
+
+      window.open(`/gif-viewer.html?${params.toString()}`, '_blank', 'noopener,noreferrer');
+    }
+
+    // ===========================================
+    // Header Actions
+    // ===========================================
+
+    toggleGridBtn.addEventListener('click', () => {
+      state.autoLayout = !state.autoLayout;
+      if (state.autoLayout) {
+        toggleGridBtn.classList.add('active');
+        applyAutoLayout();
+      } else {
+        toggleGridBtn.classList.remove('active');
+        // Return to default layout
+        renderCurrentPage();
+      }
+    });
+
+    function applyAutoLayout() {
+      const visibleChunks = getVisibleChunks();
+      if (visibleChunks.length === 0) return;
+
+      const containerWidth = canvas.clientWidth;
+      const containerHeight = canvas.clientHeight;
+      const padding = 16;
+      const gap = 12;
+
+      const count = visibleChunks.length;
+
+      // Calculate optimal grid dimensions
+      const { cols, rows } = calculateOptimalGrid(count, containerWidth, containerHeight);
+
+      // Calculate card dimensions to fill the space
+      const availableWidth = containerWidth - (padding * 2) - (gap * (cols - 1));
+      const availableHeight = containerHeight - (padding * 2) - (gap * (rows - 1));
+
+      const cardWidth = Math.floor(availableWidth / cols);
+      const cardHeight = Math.floor(availableHeight / rows);
+
+      // Position each card
+      visibleChunks.forEach((chunk, index) => {
+        const col = index % cols;
+        const row = Math.floor(index / cols);
+
+        chunk.x = padding + col * (cardWidth + gap);
+        chunk.y = padding + row * (cardHeight + gap);
+        chunk.width = cardWidth;
+        chunk.height = cardHeight;
+
+        const card = document.getElementById(`card-${chunk.id}`);
+        if (card) {
+          card.style.left = `${chunk.x}px`;
+          card.style.top = `${chunk.y}px`;
+          card.style.width = `${chunk.width}px`;
+          card.style.height = `${chunk.height}px`;
+        }
+      });
+
+      // Update container height
+      const totalRows = Math.ceil(count / cols);
+      const totalHeight = padding * 2 + totalRows * cardHeight + (totalRows - 1) * gap;
+      cardsContainer.style.minHeight = `${Math.max(totalHeight, containerHeight)}px`;
+    }
+
+    function calculateOptimalGrid(count, containerWidth, containerHeight) {
+      // Try different grid configurations and pick the best one
+      let bestCols = 1;
+      let bestRows = count;
+      let bestScore = 0;
+
+      for (let cols = 1; cols <= count; cols++) {
+        const rows = Math.ceil(count / cols);
+
+        // Calculate card size for this configuration
+        const cardWidth = (containerWidth - 32 - (cols - 1) * 12) / cols;
+        const cardHeight = (containerHeight - 32 - (rows - 1) * 12) / rows;
+
+        // Skip if cards would be too small
+        if (cardWidth < 150 || cardHeight < 180) continue;
+
+        // Score based on how square the cards are and how well they fill the space
+        const aspectRatio = cardWidth / cardHeight;
+        const idealAspect = 0.85; // Slightly taller than wide for QR cards
+        const aspectScore = 1 - Math.abs(aspectRatio - idealAspect);
+
+        // Prefer configurations that use all cells efficiently
+        const usedCells = count;
+        const totalCells = cols * rows;
+        const fillScore = usedCells / totalCells;
+
+        // Prefer larger cards
+        const sizeScore = (cardWidth * cardHeight) / (containerWidth * containerHeight);
+
+        const score = aspectScore * 0.4 + fillScore * 0.3 + sizeScore * 0.3;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestCols = cols;
+          bestRows = rows;
+        }
+      }
+
+      return { cols: bestCols, rows: bestRows };
+    }
+
+    // Re-apply auto layout on window resize
+    window.addEventListener('resize', () => {
+      if (state.autoLayout) {
+        applyAutoLayout();
+      }
+    });
+
+    resetLayoutBtn.addEventListener('click', () => {
+      state.currentPage = 0;
+      state.autoLayout = false;
+      toggleGridBtn.classList.remove('active');
+      renderCurrentPage();
+    });
+
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(console.error);
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+      const icon = fullscreenBtn.querySelector('.material-symbols-outlined');
+      icon.textContent = document.fullscreenElement ? 'fullscreen_exit' : 'fullscreen';
+    });
+
+    // Pagination controls
+    perPageSelect.addEventListener('change', (e) => {
+      const value = e.target.value;
+      state.perPage = value === 'all' ? 'all' : parseInt(value, 10);
+      state.currentPage = 0;
+      renderCurrentPage();
+    });
+
+    prevPageBtn.addEventListener('click', () => {
+      if (state.currentPage > 0) {
+        state.currentPage--;
+        renderCurrentPage();
+      }
+    });
+
+    nextPageBtn.addEventListener('click', () => {
+      if (state.currentPage < getTotalPages() - 1) {
+        state.currentPage++;
+        renderCurrentPage();
+      }
+    });
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') {
+        prevPageBtn.click();
+      } else if (e.key === 'ArrowRight') {
+        nextPageBtn.click();
+      }
+    });
+
+    // ===========================================
+    // Initialize
+    // ===========================================
+
+    init();
+
+    // ===========================================
+    // GIF Player - Parse and animate GIFs with frame counter
+    // ===========================================
+
+    const gifPlayers = new Map(); // chunkId -> player state
+
+    async function initGifPlayer(chunk) {
+      const canvas = document.getElementById(`canvas-${chunk.id}`);
+      const frameInfo = document.getElementById(`frame-${chunk.id}`);
+
+      if (!canvas || !chunk.blobUrl) return;
+
+      try {
+        // Fetch GIF data
+        const response = await fetch(chunk.blobUrl);
+        const arrayBuffer = await response.arrayBuffer();
+        const frames = await parseGif(new Uint8Array(arrayBuffer));
+
+        if (frames.length === 0) {
+          frameInfo.innerHTML = 'Frame 0/0';
+          return;
+        }
+
+        // Store player state
+        const player = {
+          chunkId: chunk.id,
+          frames,
+          currentFrame: 0,
+          canvas,
+          ctx: canvas.getContext('2d'),
+          frameInfo,
+          animationId: null,
+          lastTime: 0,
+        };
+
+        gifPlayers.set(chunk.id, player);
+
+        // Set canvas size to first frame
+        canvas.width = frames[0].width;
+        canvas.height = frames[0].height;
+
+        // Start animation
+        animateGif(chunk.id);
+
+      } catch (error) {
+        console.error(`Failed to parse GIF for chunk ${chunk.id}:`, error);
+        frameInfo.innerHTML = 'Error';
+      }
+    }
+
+    function animateGif(chunkId) {
+      const player = gifPlayers.get(chunkId);
+      if (!player) return;
+
+      const { frames, ctx, canvas, frameInfo } = player;
+      const frame = frames[player.currentFrame];
+
+      // Draw current frame
+      ctx.putImageData(frame.imageData, 0, 0);
+
+      // Update frame info
+      let frameText = `Frame ${player.currentFrame + 1}/${frames.length}`;
+
+      // Get minFrames for this specific chunk
+      const minFrames = state.chunkMinFrames[player.chunkId];
+      if (minFrames && minFrames > 0) {
+        frameText += ` <span class="min-required">(min: ${minFrames})</span>`;
+      }
+      frameInfo.innerHTML = frameText;
+
+      // Schedule next frame
+      const delay = frame.delay || 100;
+      player.animationId = setTimeout(() => {
+        player.currentFrame = (player.currentFrame + 1) % frames.length;
+        animateGif(chunkId);
+      }, delay);
+    }
+
+    function stopGifPlayer(chunkId) {
+      const player = gifPlayers.get(chunkId);
+      if (player && player.animationId) {
+        clearTimeout(player.animationId);
+        player.animationId = null;
+      }
+      gifPlayers.delete(chunkId);
+    }
+
+    // ===========================================
+    // GIF Parser - Minimal implementation
+    // ===========================================
+
+    async function parseGif(data) {
+      const frames = [];
+
+      // Check GIF signature
+      const signature = String.fromCharCode(...data.slice(0, 6));
+      if (!signature.startsWith('GIF')) {
+        throw new Error('Not a valid GIF');
+      }
+
+      // Read Logical Screen Descriptor
+      const width = data[6] | (data[7] << 8);
+      const height = data[8] | (data[9] << 8);
+      const packed = data[10];
+      const hasGCT = (packed & 0x80) !== 0;
+      const gctSize = hasGCT ? 3 * Math.pow(2, (packed & 0x07) + 1) : 0;
+
+      let globalColorTable = null;
+      if (hasGCT) {
+        globalColorTable = data.slice(13, 13 + gctSize);
+      }
+
+      let pos = 13 + gctSize;
+      let transparentIndex = -1;
+      let delay = 100;
+      let disposalMethod = 0;
+
+      // Create a canvas for compositing
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = width;
+      tempCanvas.height = height;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      // Previous frame for disposal
+      let previousImageData = null;
+
+      while (pos < data.length) {
+        const blockType = data[pos++];
+
+        if (blockType === 0x21) {
+          // Extension block
+          const extType = data[pos++];
+
+          if (extType === 0xF9) {
+            // Graphics Control Extension
+            pos++; // block size (always 4)
+            const gcPacked = data[pos++];
+            disposalMethod = (gcPacked >> 2) & 0x07;
+            const hasTransparency = (gcPacked & 0x01) !== 0;
+            delay = (data[pos] | (data[pos + 1] << 8)) * 10;
+            pos += 2;
+            transparentIndex = hasTransparency ? data[pos++] : -1;
+            pos++; // block terminator
+          } else {
+            // Skip other extensions
+            while (data[pos] !== 0) {
+              pos += data[pos] + 1;
+            }
+            pos++; // terminator
+          }
+        } else if (blockType === 0x2C) {
+          // Image Descriptor
+          const left = data[pos] | (data[pos + 1] << 8);
+          const top = data[pos + 2] | (data[pos + 3] << 8);
+          const frameWidth = data[pos + 4] | (data[pos + 5] << 8);
+          const frameHeight = data[pos + 6] | (data[pos + 7] << 8);
+          pos += 8;
+
+          const imgPacked = data[pos++];
+          const hasLCT = (imgPacked & 0x80) !== 0;
+          const interlaced = (imgPacked & 0x40) !== 0;
+          const lctSize = hasLCT ? 3 * Math.pow(2, (imgPacked & 0x07) + 1) : 0;
+
+          let colorTable = globalColorTable;
+          if (hasLCT) {
+            colorTable = data.slice(pos, pos + lctSize);
+            pos += lctSize;
+          }
+
+          // LZW decode
+          const minCodeSize = data[pos++];
+          let lzwData = [];
+          while (data[pos] !== 0) {
+            const subBlockSize = data[pos++];
+            for (let i = 0; i < subBlockSize; i++) {
+              lzwData.push(data[pos++]);
+            }
+          }
+          pos++; // terminator
+
+          const pixels = decodeLZW(lzwData, minCodeSize, frameWidth * frameHeight);
+
+          // Handle disposal before drawing new frame
+          if (disposalMethod === 2) {
+            // Restore to background (transparent)
+            tempCtx.clearRect(0, 0, width, height);
+          } else if (disposalMethod === 3 && previousImageData) {
+            // Restore to previous
+            tempCtx.putImageData(previousImageData, 0, 0);
+          }
+
+          // Save current state if needed for next disposal
+          if (disposalMethod === 3) {
+            previousImageData = tempCtx.getImageData(0, 0, width, height);
+          }
+
+          // Draw pixels to temp canvas
+          const imageData = tempCtx.getImageData(0, 0, width, height);
+          const frameData = imageData.data;
+
+          for (let y = 0; y < frameHeight; y++) {
+            for (let x = 0; x < frameWidth; x++) {
+              let srcY = y;
+              if (interlaced) {
+                srcY = deinterlace(y, frameHeight);
+              }
+
+              const pixelIndex = srcY * frameWidth + x;
+              const colorIndex = pixels[pixelIndex];
+
+              if (colorIndex === transparentIndex) continue;
+
+              const destX = left + x;
+              const destY = top + y;
+              if (destX >= width || destY >= height) continue;
+
+              const destIndex = (destY * width + destX) * 4;
+              const colorOffset = colorIndex * 3;
+
+              if (colorTable && colorOffset + 2 < colorTable.length) {
+                frameData[destIndex] = colorTable[colorOffset];
+                frameData[destIndex + 1] = colorTable[colorOffset + 1];
+                frameData[destIndex + 2] = colorTable[colorOffset + 2];
+                frameData[destIndex + 3] = 255;
+              }
+            }
+          }
+
+          tempCtx.putImageData(imageData, 0, 0);
+
+          // Store frame
+          frames.push({
+            imageData: tempCtx.getImageData(0, 0, width, height),
+            width,
+            height,
+            delay: delay || 100,
+          });
+
+          transparentIndex = -1;
+          delay = 100;
+
+        } else if (blockType === 0x3B) {
+          // Trailer - end of GIF
+          break;
+        } else if (blockType === 0x00) {
+          // Padding, skip
+          continue;
+        } else {
+          // Unknown block, try to skip
+          break;
+        }
+      }
+
+      return frames;
+    }
+
+    function decodeLZW(data, minCodeSize, pixelCount) {
+      const clearCode = 1 << minCodeSize;
+      const endCode = clearCode + 1;
+      let codeSize = minCodeSize + 1;
+      let codeMask = (1 << codeSize) - 1;
+
+      // Initialize code table
+      let codeTable = [];
+      for (let i = 0; i < clearCode; i++) {
+        codeTable[i] = [i];
+      }
+      codeTable[clearCode] = [];
+      codeTable[endCode] = [];
+
+      let nextCode = endCode + 1;
+      let bitBuffer = 0;
+      let bitCount = 0;
+      let dataPos = 0;
+      let pixels = [];
+      let prevCode = -1;
+
+      function readCode() {
+        while (bitCount < codeSize && dataPos < data.length) {
+          bitBuffer |= data[dataPos++] << bitCount;
+          bitCount += 8;
+        }
+        const code = bitBuffer & codeMask;
+        bitBuffer >>= codeSize;
+        bitCount -= codeSize;
+        return code;
+      }
+
+      while (pixels.length < pixelCount && dataPos < data.length) {
+        const code = readCode();
+
+        if (code === clearCode) {
+          codeSize = minCodeSize + 1;
+          codeMask = (1 << codeSize) - 1;
+          codeTable = [];
+          for (let i = 0; i < clearCode; i++) {
+            codeTable[i] = [i];
+          }
+          codeTable[clearCode] = [];
+          codeTable[endCode] = [];
+          nextCode = endCode + 1;
+          prevCode = -1;
+          continue;
+        }
+
+        if (code === endCode) {
+          break;
+        }
+
+        let entry;
+        if (code < codeTable.length && codeTable[code]) {
+          entry = codeTable[code];
+        } else if (code === nextCode && prevCode >= 0) {
+          entry = [...codeTable[prevCode], codeTable[prevCode][0]];
+        } else {
+          break;
+        }
+
+        pixels.push(...entry);
+
+        if (prevCode >= 0 && nextCode < 4096) {
+          codeTable[nextCode++] = [...codeTable[prevCode], entry[0]];
+
+          if (nextCode > codeMask && codeSize < 12) {
+            codeSize++;
+            codeMask = (1 << codeSize) - 1;
+          }
+        }
+
+        prevCode = code;
+      }
+
+      return pixels;
+    }
+
+    function deinterlace(y, height) {
+      const pass1 = Math.floor((height + 7) / 8);
+      const pass2 = Math.floor((height + 3) / 8);
+      const pass3 = Math.floor((height + 1) / 4);
+
+      if (y < pass1) return y * 8;
+      if (y < pass1 + pass2) return (y - pass1) * 8 + 4;
+      if (y < pass1 + pass2 + pass3) return (y - pass1 - pass2) * 4 + 2;
+      return (y - pass1 - pass2 - pass3) * 2 + 1;
+    }
+  </script>
+</body>
+</html>

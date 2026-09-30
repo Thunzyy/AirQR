@@ -1,0 +1,6 @@
+[workspace]
+members = ["packages/airqr-core"]
+# The Flutter mobile FFI crate lives under the repo root but is built
+# independently by cargokit/flutter_rust_bridge, not as part of this workspace.
+exclude = ["apps/flutter/rust"]
+resolver = "2"

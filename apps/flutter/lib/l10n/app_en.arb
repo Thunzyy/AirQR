@@ -1,0 +1,816 @@
+{
+  "@@locale": "en",
+
+  "nav_encoder": "Encoder",
+  "nav_decoder": "Decoder",
+  "nav_scanner": "Scanner",
+  "nav_history": "History",
+  "nav_settings": "Settings",
+
+  "common_loading": "Loading...",
+  "common_error": "Error",
+  "common_success": "Success",
+  "common_cancel": "Cancel",
+  "common_save": "Save",
+  "common_delete": "Delete",
+  "common_download": "Download",
+  "common_copy": "Copy",
+  "common_open": "Open",
+  "common_upload": "Upload",
+  "common_close": "Close",
+  "common_yes": "Yes",
+  "common_no": "No",
+  "common_confirm": "Confirm",
+  "common_back": "Back",
+  "common_next": "Next",
+  "common_reset": "Reset",
+  "common_retry": "Try again",
+  "common_clear": "Clear",
+  "common_search": "Search",
+  "common_noResults": "No results",
+  "common_items": "items",
+  "common_files": "files",
+  "common_file": "file",
+  "common_folder": "folder",
+  "common_frames": "frames",
+  "common_bytes": "bytes",
+  "common_fps": "fps",
+  "common_today": "Today",
+  "common_yesterday": "Yesterday",
+  "common_older": "Older",
+  "common_lineCount": "{count, plural, one {{count} line} other {{count} lines}}",
+  "@common_lineCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "common_charCount": "{count, plural, one {{count} char} other {{count} chars}}",
+  "@common_charCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "common_byteCount": "{count, plural, one {{count} byte} other {{count} bytes}}",
+  "@common_byteCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+
+  "encoder_title": "Encoder",
+  "encoder_selectFiles": "Select File(s)",
+  "encoder_selectFolder": "Select Folder",
+  "encoder_dropzone": "Choose files or an entire folder to encode",
+  "encoder_filesSelected": "files selected",
+  "encoder_advancedSettings": "Advanced Settings",
+  "encoder_frameRate": "Frame Rate (FPS)",
+  "encoder_slowFps": "Slow (1)",
+  "encoder_fastFps": "Fast (60)",
+  "encoder_packetSize": "Packet Size",
+  "encoder_smallPacket": "Small (100)",
+  "encoder_largePacket": "Large (2800)",
+  "encoder_errorCorrection": "Error Correction",
+  "encoder_targetQrSize": "Target QR Size",
+  "encoder_raptorqOverhead": "Redundancy",
+  "encoder_lessRedundancy": "Less redundancy (1x)",
+  "encoder_moreRedundancy": "More redundancy (3x)",
+  "encoder_compression": "Compression",
+  "encoder_compressionDesc": "Enable ZIP compression for smaller files",
+  "encoder_forceChunkMode": "Force Chunk Mode",
+  "encoder_forceChunkModeDesc": "Split large files into multiple GIFs",
+  "encoder_chunkSize": "Chunk Size",
+  "encoder_generate": "Generate QR GIF",
+  "encoder_encoding": "Encoding...",
+  "encoder_encodingProgress": "Encoding... {percent}%",
+  "@encoder_encodingProgress": {
+    "placeholders": {
+      "percent": {"type": "int"}
+    }
+  },
+  "encoder_result": "Result",
+  "encoder_expansion": "expansion",
+  "encoder_chunk": "Chunk {current}/{total}",
+  "@encoder_chunk": {
+    "placeholders": {
+      "current": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "encoder_autoAdvanceOn": "Auto-advance ON",
+  "encoder_autoAdvanceOff": "Auto-advance OFF",
+  "encoder_auto": "Auto",
+  "encoder_manual": "Manual",
+  "encoder_frame": "Frame",
+  "encoder_playbackFps": "Playback FPS",
+  "encoder_minScanTime": "Min scan {time}",
+  "@encoder_minScanTime": {
+    "placeholders": {"time": {"type": "String"}}
+  },
+  "encoder_collapseControls": "Collapse controls",
+  "encoder_showControls": "Show controls",
+  "encoder_minRequired": "Min Required",
+  "encoder_minShort": "Min",
+  "encoder_zoomOut": "Zoom Out",
+  "encoder_zoomIn": "Zoom In",
+  "encoder_resetZoom": "Reset zoom",
+  "encoder_dataChunks": "Data Chunks",
+  "encoder_multiView": "Multi-View",
+  "encoder_downloadZip": "Download ZIP",
+  "encoder_downloadGif": "Download GIF",
+  "encoder_tapToSelect": "Tap to select a file",
+  "encoder_fileSelected": "File selected",
+  "encoder_selectSource": "Select Source",
+  "encoder_modeFile": "File",
+  "encoder_modeNote": "Note",
+  "encoder_noteEditorTitle": "Quick Note",
+  "encoder_noteFormat": "Format",
+  "encoder_notePlaceholder": "Type or paste your note here...",
+  "encoder_clearNote": "Clear note",
+  "encoder_noteStats": "{chars} chars • {bytes} bytes",
+  "@encoder_noteStats": {
+    "placeholders": {
+      "chars": {"type": "int"},
+      "bytes": {"type": "int"}
+    }
+  },
+  "encoder_noteFormat_plain": "Plain text",
+  "encoder_noteFormat_markdown": "Markdown",
+  "encoder_noteFormat_javascript": "JavaScript",
+  "encoder_noteFormat_python": "Python",
+  "encoder_noteFormat_typescript": "TypeScript",
+  "encoder_noteFormat_json": "JSON",
+  "encoder_noteFormat_html": "HTML",
+  "encoder_noteFormat_css": "CSS",
+  "encoder_noteFormat_rust": "Rust",
+  "encoder_noteFormat_sql": "SQL",
+  "encoder_noteFormat_yaml": "YAML",
+  "encoder_noteFormat_shell": "Shell",
+  "encoder_singleFile": "File",
+  "encoder_singleFileDesc": "Select a single file",
+  "encoder_folderDesc": "Select folder (will be zipped)",
+  "encoder_zipFile": "ZIP File",
+  "encoder_zipFileDesc": "Import existing ZIP archive",
+  "encoder_scale": "Scale (0=Auto)",
+  "encoder_chunkSizeMb": "Chunk Size (MB)",
+  "encoder_savedToDownloads": "Saved to Downloads: {filename}",
+  "@encoder_savedToDownloads": {
+    "placeholders": {
+      "filename": {"type": "String"}
+    }
+  },
+  "encoder_saved": "Saved: {filename}",
+  "@encoder_saved": {
+    "placeholders": {
+      "filename": {"type": "String"}
+    }
+  },
+  "encoder_savedChunks": "Saved to Downloads: {filename} ({chunks} chunks)",
+  "@encoder_savedChunks": {
+    "placeholders": {
+      "filename": {"type": "String"},
+      "chunks": {"type": "int"}
+    }
+  },
+  "encoder_totalFrames": "{count} total frames",
+  "@encoder_totalFrames": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "encoder_encodedIn": "Encoded in {seconds}s",
+  "@encoder_encodedIn": {
+    "placeholders": {
+      "seconds": {"type": "String"}
+    }
+  },
+  "encoder_networkTitle": "Use AirQR from another device",
+  "encoder_networkBody": "Start the offline web app server in Settings to share the encoder and decoder on your local network. You can also download the desktop, mobile, or web version from GitHub.",
+  "encoder_openOfflineWebSettings": "Open server settings",
+  "encoder_openGithubReleases": "GitHub releases",
+  "encoder_hideNetworkNotice": "Do not show again",
+
+  "decoder_title": "Decoder",
+  "decoder_selectFileCardTitle": "GIF or ZIP file",
+  "decoder_dropGif": "Drop a GIF or ZIP file to decode",
+  "decoder_tapToSelect": "Tap to select a GIF file",
+  "decoder_readingFile": "Reading file...",
+  "decoder_initDecoder": "Initializing decoder...",
+  "decoder_extractingFrames": "Extracting GIF frames...",
+  "decoder_processingFrames": "Processing {count} frames...",
+  "@decoder_processingFrames": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "decoder_decodingProgress": "Decoding: {percent}% ({count} QR codes detected)",
+  "@decoder_decodingProgress": {
+    "placeholders": {
+      "percent": {"type": "int"},
+      "count": {"type": "int"}
+    }
+  },
+  "decoder_chunkComplete": "Chunk {current}/{total} complete",
+  "@decoder_chunkComplete": {
+    "placeholders": {
+      "current": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "decoder_decodingComplete": "Decoding complete!",
+  "decoder_decodeGif": "Decode GIF",
+  "decoder_saveFile": "Save File",
+  "decoder_notEnoughQr": "Could not complete decoding. Not enough valid QR codes found.",
+  "decoder_notAirQrGif": "This GIF is not an AirQR transfer. Encode a file in the Encode tab first, then decode that GIF — or try the sample below.",
+  "decoder_notAirQrStatus": "No AirQR QR codes found in this GIF.",
+  "decoder_invalidGif": "This file could not be read as an AirQR GIF or ZIP.",
+  "decoder_fileUnreadable": "The selected file could not be read. Try selecting it again.",
+  "decoder_airQrOnlyHint": "Decode only works with GIFs created by AirQR, not a regular photo GIF.",
+  "decoder_trySample": "Try a sample GIF",
+  "decoder_sampleFilename": "airqr-sample.txt",
+  "decoder_sampleNote": "Hello from AirQR.\nThis note was recovered from an animated QR GIF.",
+  "decoder_sampleFailed": "Could not build the sample GIF.",
+  "decoder_noGifInZip": "No GIF files found in ZIP archive",
+  "decoder_chunkWaiting": "Chunk processed. Waiting for remaining chunks...",
+  "decoder_fileSelected": "File selected. Tap decode to start.",
+  "decoder_status": "Status",
+  "decoder_processingZip": "Processing ZIP archive...",
+  "decoder_processingGif": "Processing GIF frames...",
+  "decoder_complete": "Complete! {frames} frames, {qrCodes} QR codes ({time}ms)",
+  "@decoder_complete": {
+    "placeholders": {
+      "frames": {"type": "int"},
+      "qrCodes": {"type": "int"},
+      "time": {"type": "int"}
+    }
+  },
+  "decoder_failed": "Failed: {frames} frames, {qrCodes} QR codes",
+  "@decoder_failed": {
+    "placeholders": {
+      "frames": {"type": "int"},
+      "qrCodes": {"type": "int"}
+    }
+  },
+  "decoder_unknownFile": "Unknown file",
+  "decoder_fileSaved": "File saved successfully",
+  "decoder_saveFailed": "Save failed: {error}",
+  "@decoder_saveFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+
+  "scanner_title": "Scanner",
+  "scanner_initCamera": "Initializing camera...",
+  "scanner_cameraError": "Camera access denied or unavailable",
+  "scanner_scanning": "Scanning...",
+  "scanner_resumingScan": "Resuming scan...",
+  "scanner_readyToScan": "Ready to scan",
+  "scanner_decoderError": "Error initializing decoder",
+  "scanner_resetScanner": "Reset Scanner",
+  "scanner_scanned": "Scanned",
+  "scanner_min": "Min",
+  "scanner_max": "Max",
+  "scanner_syncSource": "Sync: {source}",
+  "@scanner_syncSource": {
+    "description": "Scanner synchronization source",
+    "placeholders": {"source": {"type": "String"}}
+  },
+  "scanner_sessionProgress": "Session: {received}/{expected}",
+  "@scanner_sessionProgress": {
+    "description": "Scanner session packet progress",
+    "placeholders": {
+      "received": {"type": "int"},
+      "expected": {"type": "int"}
+    }
+  },
+  "scanner_missingPackets": "{count, plural, one {{count} missing} other {{count} missing}}",
+  "@scanner_missingPackets": {
+    "description": "Number of packets still missing",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "scanner_selectChunk": "Select chunk",
+  "scanner_chunkScrollTrack": "Scroll through chunks",
+  "scanner_chunkScrollValue": "{percent}%",
+  "@scanner_chunkScrollValue": {
+    "description": "Horizontal position in the scanner chunk list",
+    "placeholders": {"percent": {"type": "int"}}
+  },
+  "scanner_chunkLabel": "Chunk {number}",
+  "@scanner_chunkLabel": {
+    "description": "Chunk label by one-based index",
+    "placeholders": {"number": {"type": "int"}}
+  },
+  "scanner_receivedCount": "{received, plural, one {{received} received} other {{received} received}}",
+  "@scanner_receivedCount": {
+    "description": "Number of scanner packets received",
+    "placeholders": {"received": {"type": "int"}}
+  },
+  "scanner_toThreshold": "{received}/{threshold} to threshold",
+  "@scanner_toThreshold": {
+    "description": "Chunk progress toward its decode threshold",
+    "placeholders": {
+      "received": {"type": "int"},
+      "threshold": {"type": "int"}
+    }
+  },
+  "scanner_moreUniqueQr": "{count, plural, one {{count} more unique QR} other {{count} more unique QR}}",
+  "@scanner_moreUniqueQr": {
+    "description": "Additional unique QR frames needed",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "scanner_candidates": "Candidates",
+  "scanner_unseen": "Unseen",
+  "scanner_chunkComplete": "Complete",
+  "scanner_chunkReady": "Ready",
+  "scanner_chunkScanning": "Scanning",
+  "scanner_chunkMissing": "Missing",
+  "scanner_backCamera": "Back Camera",
+  "scanner_frontCamera": "Front Camera",
+  "scanner_helpConfirm": "Got it",
+  "scanner_currentChunk": "Chunk {current}/{total}",
+  "@scanner_currentChunk": {
+    "placeholders": {
+      "current": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "scanner_total": "Total",
+  "scanner_receiving": "Receiving: {percent}%",
+  "@scanner_receiving": {
+    "placeholders": {
+      "percent": {"type": "int"}
+    }
+  },
+  "scanner_selectCamera": "Select Camera",
+  "scanner_camera": "Camera",
+  "scanner_torchOn": "Turn on flashlight",
+  "scanner_torchOff": "Turn off flashlight",
+  "scanner_help": "Help",
+  "scanner_helpTitle": "Scanning Tips",
+  "scanner_helpTip_positioning": "Position the QR Code",
+  "scanner_helpTip_positioningDesc": "Center the animated QR code in the camera view. Keep a stable distance of 15-25cm for best results.",
+  "scanner_helpTip_lighting": "Good Lighting",
+  "scanner_helpTip_lightingDesc": "Ensure adequate lighting on the QR code. Avoid reflections and direct glare on the screen.",
+  "scanner_helpTip_torch": "Use the Flashlight",
+  "scanner_helpTip_torchDesc": "In low light conditions, tap the flashlight button to illuminate the QR code.",
+  "scanner_helpTip_speed": "Stay Steady",
+  "scanner_helpTip_speedDesc": "Keep your phone steady while scanning. The decoder needs time to capture all frames.",
+  "scanner_receiveComplete": "Receive complete!",
+  "scanner_noteReceived": "Note received",
+  "scanner_noteCopied": "Note copied",
+  "scanner_fileSaved": "File saved",
+  "scanner_progressLabel": "{scanned}/{minRequired}",
+  "@scanner_progressLabel": {
+    "placeholders": {
+      "scanned": {"type": "int"},
+      "minRequired": {"type": "int"}
+    }
+  },
+  "scanner_paused": "Paused",
+  "scanner_scanAnother": "Scan Another",
+  "scanner_resumingWithPackets": "Resuming scan... ({count} packets loaded)",
+  "@scanner_resumingWithPackets": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "scanner_resumingProgress": "Resuming: {percent}% ({received}/{expected})",
+  "@scanner_resumingProgress": {
+    "placeholders": {
+      "percent": {"type": "String"},
+      "received": {"type": "int"},
+      "expected": {"type": "int"}
+    }
+  },
+  "scanner_completed": "Completed! {filename}\nTime: {time} | Size: {size} KB\nFrames: {frames}",
+  "@scanner_completed": {
+    "placeholders": {
+      "filename": {"type": "String"},
+      "time": {"type": "String"},
+      "size": {"type": "String"},
+      "frames": {"type": "int"}
+    }
+  },
+  "scanner_resumedTapPlay": "Resumed {received}/{expected} - Tap play to continue",
+  "@scanner_resumedTapPlay": {
+    "placeholders": {
+      "received": {"type": "int"},
+      "expected": {"type": "int"}
+    }
+  },
+  "scanner_presetActive": "Preset: {name}",
+  "@scanner_presetActive": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "scanner_errorProcessing": "Error processing chunk: {error}",
+  "@scanner_errorProcessing": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "scanner_progressDetails": "Progress: {percent}% ({received}/{expected})\nScan Rate: {fps} FPS",
+  "@scanner_progressDetails": {
+    "placeholders": {
+      "percent": {"type": "String"},
+      "received": {"type": "int"},
+      "expected": {"type": "int"},
+      "fps": {"type": "int"}
+    }
+  },
+  "scanner_errorMsg": "Error: {msg}",
+  "@scanner_errorMsg": {
+    "placeholders": {
+      "msg": {"type": "String"}
+    }
+  },
+  "scanner_errorSaving": "Error saving: {error}",
+  "@scanner_errorSaving": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "scanner_fileSavedAs": "File saved: {name}",
+  "@scanner_fileSavedAs": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+
+  "history_title": "History",
+  "history_all": "All",
+  "history_scanned": "Scanned",
+  "history_generated": "Generated",
+  "history_searchHistory": "Search history",
+  "history_searchFiles": "Search files...",
+  "history_clearSearch": "Clear search",
+  "history_refresh": "Refresh",
+  "history_connected": "Connected",
+  "history_keepLocal": "Keep local",
+  "history_syncToServer": "Sync local history to server",
+  "history_incompleteScans": "INCOMPLETE SCANS",
+  "history_scanItem": "Scan {index}",
+  "@history_scanItem": {
+    "placeholders": {
+      "index": {"type": "String"}
+    }
+  },
+  "history_chunksProgress": "Chunks: {current}/{total} • Frames: {frames}/{totalFrames}",
+  "@history_chunksProgress": {
+    "placeholders": {
+      "current": {"type": "int"},
+      "total": {"type": "int"},
+      "frames": {"type": "int"},
+      "totalFrames": {"type": "int"}
+    }
+  },
+  "history_resumeScan": "Resume scan",
+  "history_deleteIncomplete": "Delete incomplete scan",
+  "history_viewGif": "View GIF",
+  "history_zipArchive": "ZIP Archive",
+  "history_noGifFound": "No GIF files found",
+  "history_exitFullscreen": "Exit fullscreen",
+  "history_fullscreen": "Fullscreen",
+  "history_multiChunkView": "Multi-Chunk View ({count} chunks)",
+  "@history_multiChunkView": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "history_columns": "Columns:",
+  "history_zoom": "Zoom:",
+  "history_select": "Select",
+  "history_noFilesScanned": "No files received yet",
+  "history_noFilesGenerated": "No files generated yet",
+  "history_deleteFileTitle": "Delete file?",
+  "history_deleteFileConfirm": "Are you sure you want to delete \"{filename}\"?",
+  "@history_deleteFileConfirm": {
+    "placeholders": {
+      "filename": {"type": "String"}
+    }
+  },
+  "history_localOnly": "\"{filename}\" is now stored locally only",
+  "@history_localOnly": {
+    "placeholders": {
+      "filename": {"type": "String"}
+    }
+  },
+  "history_syncNotConfigured": "Sync is not configured",
+  "history_fileNotFound": "File not found",
+  "history_syncQueued": "\"{filename}\" queued for sync",
+  "@history_syncQueued": {
+    "placeholders": {
+      "filename": {"type": "String"}
+    }
+  },
+  "history_syncFailed": "Sync failed: {error}",
+  "@history_syncFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "history_scanCompleted": "Scan completed: {filename}",
+  "@history_scanCompleted": {
+    "placeholders": {
+      "filename": {"type": "String"}
+    }
+  },
+  "history_packets": "{received}/{expected} packets",
+  "@history_packets": {
+    "placeholders": {
+      "received": {"type": "int"},
+      "expected": {"type": "int"}
+    }
+  },
+  "history_serverSyncPackets": "Server sync: {received}/{expected} packets",
+  "@history_serverSyncPackets": {
+    "placeholders": {
+      "received": {"type": "int"},
+      "expected": {"type": "int"}
+    }
+  },
+  "history_sharedFromAirQR": "Shared from AirQR History",
+
+  "settings_title": "Settings",
+
+  "settings_encoderSection": "ENCODER",
+  "settings_slowFps": "Slow (1)",
+  "settings_fastFps": "Fast (60)",
+  "settings_smallPacket": "Small (100)",
+  "settings_largePacket": "Large (2800)",
+  "settings_frameRate": "Frame Rate (FPS)",
+  "settings_packetSize": "Packet Size",
+  "settings_overhead": "Overhead",
+
+  "settings_scannerSection": "SCANNER",
+  "settings_scannerPresetSection": "SCANNER PRESET",
+  "settings_scannerAdvancedSection": "SCANNER ADVANCED",
+  "settings_preset": "Preset",
+  "settings_preset_turbo": "Turbo",
+  "settings_preset_turboDesc": "Maximum speed, lower accuracy",
+  "settings_preset_fast": "Fast",
+  "settings_preset_fastDesc": "Fast scanning, good balance",
+  "settings_preset_balanced": "Balanced",
+  "settings_preset_balancedDesc": "Recommended for most cases",
+  "settings_preset_reliable": "Reliable",
+  "settings_preset_reliableDesc": "Best accuracy, slower",
+  "settings_preset_silent": "Silent",
+  "settings_preset_silentDesc": "No sounds or vibrations",
+  "settings_preset_custom": "Custom",
+  "settings_preset_customDesc": "Your custom settings",
+  "settings_customModeHint": "Modifying these settings will switch to \"Custom\" mode.",
+  "settings_scanInterval": "Scan Interval",
+  "settings_maxSpeed": "Max speed (0ms)",
+  "settings_batterySaver": "Battery saver (500ms)",
+  "settings_resolution": "Resolution",
+  "settings_detectionSpeed": "Detection Speed",
+  "settings_fast": "Fast",
+  "settings_accurate": "Accurate",
+  "settings_accurateModeHint": "Accurate mode improves detection in noisy frames but uses more CPU.",
+  "settings_torch": "Torch",
+  "settings_torchDesc": "Enable the camera flashlight if supported",
+  "settings_scannerTip": "For best results with scanner, please use the native application for your device.",
+  "settings_wakelock": "Wakelock",
+  "settings_wakelockDesc": "Keep screen on during scanning",
+  "settings_scanMode": "Scan Mode",
+  "settings_scanModeRealtime": "Realtime",
+  "settings_scanModeRealtimeDesc": "Process each frame immediately (lower latency)",
+  "settings_scanModeBatch": "Batch",
+  "settings_scanModeBatchDesc": "Collect frames then process (more reliable)",
+  "settings_batchDelay": "Batch Delay (ms)",
+  "settings_maxCacheFrames": "Max Cache Frames",
+  "settings_unknownResolution": "Unknown resolution",
+  "settings_detectionTimeout": "Detection Timeout",
+  "settings_detectionNormal": "Normal",
+  "settings_detectionNoDuplicates": "No Duplicates",
+  "settings_detectionUnrestricted": "Unrestricted",
+  "settings_torchFlash": "Torch (Flash)",
+  "settings_torchFlashDesc": "Enable for low light",
+  "settings_syncScannedFiles": "Sync Scanned Files",
+  "settings_syncScannedFilesDesc": "Upload scanned files to server",
+  "settings_syncGeneratedFiles": "Sync Generated Files",
+  "settings_syncGeneratedFilesDesc": "Upload generated GIFs to server",
+  "settings_autoSyncShort": "Auto Sync",
+  "settings_autoSyncShortDesc": "Sync automatically after scan/generate",
+  "settings_poweredBy": "Powered by RaptorQ fountain codes",
+
+  "settings_serverSyncSection": "SERVER SYNC",
+  "settings_enableSync": "Enable server sync",
+  "settings_enableSyncDesc": "Sync history across devices and resume scans.",
+  "settings_syncScanned": "Sync scanned history",
+  "settings_syncScannedDesc": "Upload scan packets and show remote scan history.",
+  "settings_syncGenerated": "Sync generated history",
+  "settings_syncGeneratedDesc": "Upload generated QR files to the server.",
+  "settings_autoSync": "Auto-sync history",
+  "settings_autoSyncDesc": "Automatically upload local scanned and generated items to the server.",
+  "settings_testConnection": "Connection",
+  "settings_testingConnection": "Connecting...",
+  "settings_syncNow": "Sync",
+  "settings_syncing": "Syncing...",
+  "settings_localServerTitle": "Local server",
+  "settings_localServerDesc": "Start the built-in sync server from this app.",
+  "settings_localServerDesktopOnly": "Local server launch is available on desktop only.",
+  "settings_localServerRunningOn": "Running on {serverUrl}",
+  "@settings_localServerRunningOn": {
+    "placeholders": {
+      "serverUrl": {}
+    }
+  },
+  "settings_launchLocalServer": "Launch local server",
+  "settings_localServerRunning": "Running",
+  "settings_stopLocalServer": "Stop server",
+  "settings_localServerStopped": "Local server stopped.",
+  "settings_localServerStarting": "Starting...",
+  "settings_localServerDialogTitle": "Launch local server",
+  "settings_startServer": "Start server",
+  "settings_localServerPort": "Port",
+  "settings_connectionSuccess": "Connected!",
+  "settings_offlineWebTitle": "Offline web app",
+  "settings_offlineWebMenuDesc": "Serve encoder and decoder on your network",
+  "settings_offlineWebDesc": "Start the bundled AirQR web app so another device on this network can open encoder and decoder in a browser.",
+  "settings_startOfflineWeb": "Start offline web app",
+  "settings_stopOfflineWeb": "Stop offline web app",
+  "settings_offlineWebStarting": "Starting...",
+  "settings_offlineWebRunning": "Running",
+  "settings_offlineWebStoppedStatus": "Stopped",
+  "settings_offlineWebStopped": "Offline web app stopped.",
+  "settings_offlineWebNoUrl": "Start the server to get a network URL.",
+  "settings_offlineWebCopied": "Offline web app URL copied",
+  "settings_offlineWebStartFailed": "Could not start offline web app server.",
+  "settings_offlineWebRunningOn": "Available at {serverUrl}",
+  "@settings_offlineWebRunningOn": {
+    "placeholders": {
+      "serverUrl": {}
+    }
+  },
+  "settings_offlineWebMoreUrls": "{count, plural, one {1 other network URL available} other {{count} other network URLs available}}",
+  "@settings_offlineWebMoreUrls": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "settings_fileExportSection": "FILE EXPORT (SERVER)",
+  "settings_fileExportDesc": "Configure where the server saves received files. Files are organized in folders by date (YYYY-MM-DD).",
+  "settings_enableExport": "Enable file export",
+  "settings_enableExportDesc": "Save received files to the configured directory.",
+  "settings_exportScanned": "Export scanned files",
+  "settings_exportScannedDesc": "Save files received from QR code scanning.",
+  "settings_exportGenerated": "Export generated files",
+  "settings_exportGeneratedDesc": "Save generated QR code files.",
+  "settings_exportDirectory": "Export Directory (PC or NAS path)",
+  "settings_exportDirectoryPlaceholder": "C:\\AirQR-Files or \\\\NAS\\share\\AirQR",
+  "settings_exportDirectoryHint": "Path on the server machine. Use UNC path (\\\\NAS\\share) for network drives.",
+  "settings_pathWarning": "Path saved but not accessible yet:",
+  "settings_pathReady": "Export path ready:",
+  "settings_configSaved": "Configuration saved!",
+  "settings_syncSuccess": "Synced: {uploaded} up, {downloaded} down",
+  "@settings_syncSuccess": {
+    "placeholders": {
+      "uploaded": {"type": "int"},
+      "downloaded": {"type": "int"}
+    }
+  },
+  "settings_serverUrl": "Server URL",
+  "settings_serverUrlHint": "Sends packets to /api/scan/packet",
+  "settings_username": "Username",
+  "settings_password": "Password",
+  "settings_apiKey": "API Key (optional)",
+  "settings_optional": "Optional",
+  "settings_deviceName": "Device Name",
+  "settings_deviceNameHint": "Name to identify this device on the server",
+
+  "settings_appearanceSection": "APPEARANCE",
+  "settings_language": "Language",
+  "settings_languageEnglish": "English",
+  "settings_languageFrench": "Français",
+  "settings_languageSystem": "System",
+  "settings_defaultCamera": "Default Camera",
+  "settings_defaultCameraDesc": "Camera to use by default when opening the scanner",
+  "settings_selectDefaultCamera": "Select a camera",
+  "settings_noCameraDetected": "No camera detected",
+  "settings_theme": "Theme",
+  "settings_themeLight": "Light",
+  "settings_themeDark": "Dark",
+  "settings_themeSystem": "System",
+  "settings_clearData": "Clear All App Data",
+  "settings_clearDataConfirm": "This will clear all app data including history, settings, and cached files. Continue?",
+  "settings_clearDataFailed": "Failed to clear app data",
+
+  "settings_aboutSection": "ABOUT",
+  "settings_appName": "AirQR Mobile",
+  "settings_appDescription": "Air-gapped file transfer using animated QR codes",
+  "settings_madeWith": "Made with ❤️ by",
+  "settings_starOnGithub": "Star on GitHub",
+  "settings_version": "Version",
+
+  "errors_cameraAccessDenied": "Camera access denied or unavailable",
+  "errors_fileTooLarge": "File is too large to process",
+  "errors_invalidFileType": "Invalid file type. Please select a valid file.",
+  "errors_encodingFailed": "Failed to encode file to QR codes",
+  "errors_decodingFailed": "Failed to decode QR codes",
+  "errors_fileSaveFailed": "Failed to save file",
+  "errors_invalidServerUrl": "Invalid server URL",
+  "errors_serverError": "Server error: {status}",
+  "@errors_serverError": {
+    "placeholders": {
+      "status": {"type": "String"}
+    }
+  },
+  "errors_connectionFailed": "Could not connect to server",
+  "errors_zipFolderFailed": "Failed to zip folder: {error}",
+  "@errors_zipFolderFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "errors_unsupportedFormat": "Unsupported file format. Use .gif or .zip",
+  "errors_nativeInitFailed": "Native Library Init Failed",
+  "errors_chunkEncodingFailed": "Chunked encoding failed",
+
+  "encoder_targetSizePx": "Target Size (px)",
+  "encoder_overheadValue": "Overhead ({value})",
+  "@encoder_overheadValue": {
+    "placeholders": {
+      "value": {"type": "String"}
+    }
+  },
+  "encoder_enableCompression": "Enable Compression",
+  "encoder_enableCompressionDesc": "Compress data with ZIP (smaller size)",
+
+  "history_errorSaving": "Error saving file: {error}",
+  "@history_errorSaving": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+
+  "decoder_decoding": "Decoding...",
+  "decoder_selectGifFile": "Select a GIF file to decode",
+  "settings_serverConnected": "CONNECTED",
+  "settings_serverUnavailable": "UNAVAILABLE",
+  "settings_loggingSection": "LOGGING",
+  "settings_logLevel": "Log level",
+  "settings_modules": "Modules",
+  "settings_resetToDefaults": "Reset to defaults",
+  "settings_backToSettings": "Back to settings",
+  "settings_logDebug": "Debug",
+  "settings_logInfo": "Info",
+  "settings_logWarn": "Warn",
+  "settings_logError": "Error",
+  "settings_moduleServices": "Services",
+  "settings_moduleWorkers": "Workers",
+  "settings_moduleHooks": "Hooks",
+  "settings_moduleScanner": "Scanner",
+  "settings_moduleUi": "UI",
+  "settings_moduleApp": "App",
+  "settings_syncEnabled": "Sync: enabled",
+  "settings_syncDisabled": "Sync: disabled",
+  "settings_encoderMenu": "Encoder",
+  "settings_scannerMenu": "Scanner",
+  "settings_serverSyncMenu": "Server sync",
+  "settings_appearanceMenu": "Appearance",
+  "settings_loggingMenu": "Logging",
+  "settings_aboutMenu": "About",
+  "decoder_unknownError": "Unknown error",
+  "encoder_startAutomaticPlayback": "Start automatic playback",
+  "encoder_pauseAutomaticPlayback": "Pause automatic playback",
+  "encoder_playbackAutomatic": "AUTO",
+  "encoder_playbackFixed": "FIXED",
+  "encoder_openFullscreen": "Open fullscreen",
+  "encoder_previousChunk": "Previous chunk",
+  "encoder_nextChunk": "Next chunk",
+  "encoder_frameProgress": "Frame: {current}/{total} (Min: {minimum})",
+  "@encoder_frameProgress": {
+    "description": "Current animated QR frame and minimum frame requirement",
+    "placeholders": {
+      "current": {"type": "int"},
+      "total": {"type": "int"},
+      "minimum": {"type": "int"}
+    }
+  },
+  "history_sort": "Sort",
+  "history_sortNewest": "Newest first",
+  "history_sortOldest": "Oldest first",
+  "history_sortLargest": "Largest first",
+  "history_sortSmallest": "Smallest first",
+  "history_sortNameAscending": "Name A–Z",
+  "history_sortNameDescending": "Name Z–A",
+  "history_clearHistory": "Clear history",
+  "history_clearHistoryTitle": "Clear history?",
+  "history_clearHistoryMessage": "All history files and incomplete scans will be deleted. Continue?",
+  "history_previewOpenFailed": "Could not open file preview.",
+  "history_previewOpenError": "Error opening file: {error}",
+  "@history_previewOpenError": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "settings_localServerStartFailed": "Could not start local server.",
+  "history_serverDeleteFailed": "Failed to delete on server.",
+  "scanner_cameraListFailed": "Failed to list cameras: {error}",
+  "@scanner_cameraListFailed": {"placeholders": {"error": {"type": "String"}}},
+  "scanner_cameraOpenFailed": "Failed to open camera: {error}",
+  "@scanner_cameraOpenFailed": {"placeholders": {"error": {"type": "String"}}},
+  "scanner_cameraOpenUnavailable": "The camera could not be opened.",
+  "scanner_cameraCaptureFailed": "Camera error: {error}",
+  "@scanner_cameraCaptureFailed": {"placeholders": {"error": {"type": "String"}}}
+}

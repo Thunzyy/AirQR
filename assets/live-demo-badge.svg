@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="60" viewBox="0 0 220 60" role="img" aria-labelledby="title desc">
+  <title id="title">Live demo</title>
+  <desc id="desc">Try AirQR in your browser</desc>
+  <rect x="0.75" y="0.75" width="218.5" height="58.5" rx="8" fill="#161b19" stroke="#59665f" stroke-width="1.5"/>
+  <g fill="none" stroke="#83dda7" stroke-width="1.6">
+    <rect x="15" y="14" width="36" height="32" rx="5"/>
+    <path d="M15 23h36"/>
+  </g>
+  <g fill="#83dda7">
+    <circle cx="21" cy="18.5" r="1"/>
+    <circle cx="25" cy="18.5" r="1"/>
+    <circle cx="29" cy="18.5" r="1"/>
+    <path d="M29 28.5a1 1 0 0 1 1.5-.86l9 5.2a1 1 0 0 1 0 1.72l-9 5.2a1 1 0 0 1-1.5-.86Z"/>
+  </g>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="64" y="21" font-size="11" fill="#b5c4bb">Try in your browser</text>
+    <text x="63" y="45" font-size="25" font-weight="600" fill="#ffffff">Live demo</text>
+  </g>
+</svg>

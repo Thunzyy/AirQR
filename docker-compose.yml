@@ -1,0 +1,35 @@
+services:
+  sync-server:
+    build:
+      context: .
+      dockerfile: services/sync-server/Dockerfile
+    # To use a pre-built image instead of building from source, uncomment:
+    # image: ghcr.io/thunzyy/airqr-sync-server:latest
+    container_name: airqr-sync-server
+    restart: unless-stopped
+    command: >
+      python server.py
+      --host 0.0.0.0
+      --port 8081
+      --ws-port 8081
+      --storage-dir /data/storage
+      --users-file /data/users.json
+      --static-dir /app/web-dist
+      --retention-incomplete 14
+      --retention-history 90
+      --trusted-proxy 172.16.0.0/12
+      --trusted-proxy 10.0.0.0/8
+      --trusted-proxy 192.168.0.0/16
+      --allow-origin https://localhost:5174
+      --allow-origin https://127.0.0.1:5174
+    environment:
+      - TZ=${TZ:-UTC}
+      - AIRQR_BOOTSTRAP_USERNAME=${AIRQR_BOOTSTRAP_USERNAME:-}
+      - AIRQR_BOOTSTRAP_PASSWORD=${AIRQR_BOOTSTRAP_PASSWORD:-}
+    ports:
+      - "${AIRQR_PORT:-8081}:8081"
+    volumes:
+      - airqr-data:/data
+
+volumes:
+  airqr-data:

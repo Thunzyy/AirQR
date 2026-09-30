@@ -1,0 +1,15 @@
+{
+  "name": "airqr-core",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "airqr_core_bg.wasm",
+    "airqr_core.js",
+    "airqr_core.d.ts"
+  ],
+  "main": "airqr_core.js",
+  "types": "airqr_core.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GIF Viewer - AirQR</title>
+
+  <link rel="stylesheet" href="/fonts.css">
+
+  <style>
+    :root {
+      --primary: #137fec;
+      --primary-hover: #1a8fff;
+      --background-dark: #0B141F;
+      --surface-dark: #1E2933;
+      --border-dark: #2b3540;
+      --text-primary: #ffffff;
+      --text-secondary: #9dabb9;
+      --success: #22c55e;
+      --warning: #f97316;
+      --error: #ef4444;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background-color: var(--background-dark);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
+    /* Header */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(16, 25, 34, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-dark);
+    }
+
+    .header-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      max-width: 100%;
+      gap: 16px;
+    }
+
+    .header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .header h1 {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .header-subtitle {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .header-subtitle span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .chunk-badge {
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(19, 127, 236, 0.2);
+      color: var(--primary);
+      border-radius: 9999px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .icon-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .icon-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* Main content */
+    .main-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow: auto;
+    }
+
+    .gif-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+    }
+
+    .gif-container {
+      position: relative;
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .gif-container canvas {
+      display: block;
+      image-rendering: pixelated;
+    }
+
+    /* Footer controls */
+    .footer {
+      padding: 16px 20px;
+      background: var(--surface-dark);
+      border-top: 1px solid var(--border-dark);
+    }
+
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .frame-info-footer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .frame-counter-text {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-family: 'Manrope', monospace;
+    }
+
+    .min-required-text {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--success);
+    }
+
+    .zoom-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .zoom-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      border: 1px solid var(--border-dark);
+      background: var(--background-dark);
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .zoom-btn:hover {
+      border-color: var(--primary);
+      background: rgba(19, 127, 236, 0.1);
+    }
+
+    .zoom-value {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      min-width: 60px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .zoom-value:hover {
+      color: var(--primary);
+    }
+
+    .separator {
+      width: 1px;
+      height: 24px;
+      background: var(--border-dark);
+    }
+
+    .download-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .download-btn:hover {
+      background: var(--primary-hover);
+    }
+
+    /* Loading/Error states */
+    .state-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 40px;
+    }
+
+    .state-container.hidden {
+      display: none;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(19, 127, 236, 0.3);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .state-text {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+
+    .error-icon {
+      font-size: 64px;
+      color: var(--error);
+    }
+
+    .close-btn {
+      padding: 8px 16px;
+      background: var(--surface-dark);
+      color: var(--text-primary);
+      border: 1px solid var(--border-dark);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .close-btn:hover {
+      background: var(--border-dark);
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-dark);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3b4754;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="header-left">
+        <h1 id="filename">GIF Viewer</h1>
+        <div class="header-subtitle">
+          <span id="fileSize"><span class="material-symbols-outlined" style="font-size: 16px;">straighten</span> --</span>
+          <span id="timestamp"><span class="material-symbols-outlined" style="font-size: 16px;">schedule</span> --</span>
+          <span id="chunkInfo" class="chunk-badge" style="display: none;">Chunk 1/1</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="fullscreenBtn" class="icon-btn" title="Plein ecran">
+          <span class="material-symbols-outlined">fullscreen</span>
+        </button>
+        <button id="closeBtn" class="icon-btn" title="Fermer">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Loading state -->
+  <div id="loadingState" class="state-container">
+    <div class="spinner"></div>
+    <p class="state-text">Chargement du GIF...</p>
+  </div>
+
+  <!-- Error state -->
+  <div id="errorState" class="state-container hidden">
+    <span class="material-symbols-outlined error-icon">error</span>
+    <p class="state-text" id="errorMessage">Erreur de chargement</p>
+    <button onclick="window.close()" class="close-btn">Fermer</button>
+  </div>
+
+  <!-- Main content -->
+  <main id="mainContent" class="main-container hidden">
+    <div class="gif-wrapper">
+      <div class="gif-container" id="gifContainer">
+        <canvas id="gifCanvas"></canvas>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer id="footer" class="footer hidden">
+    <div class="controls-row">
+      <div class="frame-info-footer">
+        <span id="frameCounterFooter" class="frame-counter-text">Frame 0/0</span>
+        <span id="minRequiredFooter" class="min-required-text"></span>
+      </div>
+
+      <div class="separator"></div>
+
+      <div class="zoom-controls">
+        <button id="zoomOutBtn" class="zoom-btn" title="Zoom -">
+          <span class="material-symbols-outlined">zoom_out</span>
+        </button>
+        <span id="zoomValue" class="zoom-value" title="Reset zoom">100%</span>
+        <button id="zoomInBtn" class="zoom-btn" title="Zoom +">
+          <span class="material-symbols-outlined">zoom_in</span>
+        </button>
+      </div>
+
+      <div class="separator"></div>
+
+      <button id="downloadBtn" class="download-btn">
+        <span class="material-symbols-outlined">download</span>
+        Telecharger
+      </button>
+    </div>
+  </footer>
+
+  <script>
+    // ===========================================
+    // IndexedDB Operations
+    // ===========================================
+
+    const DB_NAME = 'airqr-multiview';
+    const DB_VERSION = 1;
+    const STORE_NAME = 'sessions';
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+        request.onupgradeneeded = (event) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            const store = db.createObjectStore(STORE_NAME, { keyPath: 'sessionId' });
+            store.createIndex('createdAt', 'createdAt', { unique: false });
+          }
+        };
+      });
+    }
+
+    async function loadMultiviewSession(sessionId) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.get(sessionId);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result || null);
+        tx.oncomplete = () => db.close();
+      });
+    }
+
+    // ===========================================
+    // State
+    // ===========================================
+
+    let state = {
+      sessionId: null,
+      chunkIndex: 0,
+      totalChunks: 1,
+      filename: null,
+      fileSize: null,
+      timestamp: null,
+      minFrames: 0,
+      blobUrl: null,
+      scale: 1,
+      baseScale: 1,
+      gifData: null,
+      currentFrame: 0,
+      totalFrames: 0,
+      animationId: null,
+      frames: [],
+    };
+
+    // ===========================================
+    // DOM Elements
+    // ===========================================
+
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
+    const errorMessage = document.getElementById('errorMessage');
+    const mainContent = document.getElementById('mainContent');
+    const footer = document.getElementById('footer');
+    const filenameEl = document.getElementById('filename');
+    const fileSizeEl = document.getElementById('fileSize');
+    const timestampEl = document.getElementById('timestamp');
+    const chunkInfoEl = document.getElementById('chunkInfo');
+    const frameCounterEl = document.getElementById('frameCounterFooter');
+    const minRequiredEl = document.getElementById('minRequiredFooter');
+    const gifCanvas = document.getElementById('gifCanvas');
+    const gifContainer = document.getElementById('gifContainer');
+    const zoomValue = document.getElementById('zoomValue');
+    const zoomInBtn = document.getElementById('zoomInBtn');
+    const zoomOutBtn = document.getElementById('zoomOutBtn');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const closeBtn = document.getElementById('closeBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    // ===========================================
+    // Initialization
+    // ===========================================
+
+    async function init() {
+      const params = new URLSearchParams(window.location.search);
+      const sessionId = params.get('session');
+      const chunkIndex = parseInt(params.get('chunk') || '0', 10);
+      const filename = params.get('filename');
+      const minFrames = parseInt(params.get('minFrames') || '0', 10);
+      const timestamp = params.get('timestamp');
+
+      state.sessionId = sessionId;
+      state.chunkIndex = chunkIndex;
+      state.filename = filename;
+      state.minFrames = minFrames;
+      state.timestamp = timestamp;
+
+      if (!sessionId) {
+        showError("Session ID manquant. Ouvrez cette page depuis l'application AirQR.");
+        return;
+      }
+
+      try {
+        const session = await loadMultiviewSession(sessionId);
+
+        if (!session) {
+          showError('Session non trouvee ou expiree.');
+          return;
+        }
+
+        state.totalChunks = session.chunks.length;
+        state.timestamp = state.timestamp || new Date(session.createdAt).toLocaleString();
+
+        if (chunkIndex < 0 || chunkIndex >= session.chunks.length) {
+          showError(`Chunk ${chunkIndex + 1} non trouve.`);
+          return;
+        }
+
+        const chunk = session.chunks[chunkIndex];
+        const blob = new Blob([new Uint8Array(chunk.data)], { type: chunk.mimeType });
+        state.blobUrl = URL.createObjectURL(blob);
+        state.fileSize = blob.size;
+
+        // Update UI
+        updateHeader();
+
+        // Parse and display GIF
+        await loadGif(chunk.data);
+
+      } catch (error) {
+        console.error('Failed to load session:', error);
+        showError('Erreur lors du chargement de la session.');
+      }
+    }
+
+    function showError(message) {
+      loadingState.classList.add('hidden');
+      mainContent.classList.add('hidden');
+      footer.classList.add('hidden');
+      errorState.classList.remove('hidden');
+      errorMessage.textContent = message;
+    }
+
+    function updateHeader() {
+      // Filename
+      if (state.filename) {
+        filenameEl.textContent = state.filename;
+        document.title = `${state.filename} - AirQR`;
+      } else {
+        filenameEl.textContent = `Chunk ${state.chunkIndex + 1}`;
+        document.title = `Chunk ${state.chunkIndex + 1} - AirQR`;
+      }
+
+      // File size
+      if (state.fileSize) {
+        fileSizeEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">straighten</span> ${formatSize(state.fileSize)}`;
+      }
+
+      // Timestamp
+      if (state.timestamp) {
+        timestampEl.innerHTML = `<span class="material-symbols-outlined" style="font-size: 16px;">schedule</span> ${state.timestamp}`;
+      }
+
+      // Chunk info
+      if (state.totalChunks > 1) {
+        chunkInfoEl.style.display = 'inline-block';
+        chunkInfoEl.textContent = `Chunk ${state.chunkIndex + 1}/${state.totalChunks}`;
+      }
+
+      // Min frames
+      if (state.minFrames > 0) {
+        minRequiredEl.textContent = `(min: ${state.minFrames})`;
+      }
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    // ===========================================
+    // GIF Loading and Animation
+    // ===========================================
+
+    async function loadGif(data) {
+      try {
+        const frames = await parseGif(new Uint8Array(data));
+
+        if (frames.length === 0) {
+          showError('GIF invalide ou vide.');
+          return;
+        }
+
+        state.frames = frames;
+        state.totalFrames = frames.length;
+        state.currentFrame = 0;
+
+        // Set canvas size
+        gifCanvas.width = frames[0].width;
+        gifCanvas.height = frames[0].height;
+
+        // Calculate optimal scale based on screen size
+        calculateOptimalScale(frames[0].width, frames[0].height);
+
+        // Apply scale
+        applyScale();
+
+        // Show content
+        loadingState.classList.add('hidden');
+        mainContent.classList.remove('hidden');
+        footer.classList.remove('hidden');
+
+        // Start animation
+        startAnimation();
+
+      } catch (error) {
+        console.error('Failed to parse GIF:', error);
+        showError('Erreur lors du parsing du GIF.');
+      }
+    }
+
+    function calculateOptimalScale(width, height) {
+      const maxWidth = window.innerWidth * 0.85;
+      const maxHeight = window.innerHeight * 0.6;
+
+      // Calculate scale that fits within constraints
+      const scaleW = maxWidth / width;
+      const scaleH = maxHeight / height;
+
+      // Use the smaller scale to ensure it fits
+      let optimalScale = Math.min(scaleW, scaleH);
+
+      // Ensure minimum scale of 1 for small GIFs
+      if (width < 200 && height < 200) {
+        optimalScale = Math.max(optimalScale, 2);
+      }
+
+      // Round to nice values
+      optimalScale = Math.round(optimalScale * 4) / 4;
+      optimalScale = Math.max(0.5, Math.min(optimalScale, 8));
+
+      state.baseScale = optimalScale;
+      state.scale = optimalScale;
+    }
+
+    function applyScale() {
+      gifCanvas.style.width = `${gifCanvas.width * state.scale}px`;
+      gifCanvas.style.height = `${gifCanvas.height * state.scale}px`;
+      zoomValue.textContent = `${Math.round((state.scale / state.baseScale) * 100)}%`;
+    }
+
+    function startAnimation() {
+      if (state.animationId) {
+        clearTimeout(state.animationId);
+      }
+      animateFrame();
+    }
+
+    function animateFrame() {
+      const frame = state.frames[state.currentFrame];
+      const ctx = gifCanvas.getContext('2d');
+
+      // Draw frame
+      ctx.putImageData(frame.imageData, 0, 0);
+
+      // Update frame counter
+      frameCounterEl.textContent = `Frame ${state.currentFrame + 1}/${state.totalFrames}`;
+
+      // Schedule next frame
+      const delay = frame.delay || 100;
+      state.animationId = setTimeout(() => {
+        state.currentFrame = (state.currentFrame + 1) % state.totalFrames;
+        animateFrame();
+      }, delay);
+    }
+
+    // ===========================================
+    // GIF Parser (same as multi-chunk.html)
+    // ===========================================
+
+    async function parseGif(data) {
+      const frames = [];
+
+      const signature = String.fromCharCode(...data.slice(0, 6));
+      if (!signature.startsWith('GIF')) {
+        throw new Error('Not a valid GIF');
+      }
+
+      const width = data[6] | (data[7] << 8);
+      const height = data[8] | (data[9] << 8);
+      const packed = data[10];
+      const hasGCT = (packed & 0x80) !== 0;
+      const gctSize = hasGCT ? 3 * Math.pow(2, (packed & 0x07) + 1) : 0;
+
+      let globalColorTable = null;
+      if (hasGCT) {
+        globalColorTable = data.slice(13, 13 + gctSize);
+      }
+
+      let pos = 13 + gctSize;
+      let transparentIndex = -1;
+      let delay = 100;
+      let disposalMethod = 0;
+
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = width;
+      tempCanvas.height = height;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      let previousImageData = null;
+
+      while (pos < data.length) {
+        const blockType = data[pos++];
+
+        if (blockType === 0x21) {
+          const extType = data[pos++];
+
+          if (extType === 0xF9) {
+            pos++;
+            const gcPacked = data[pos++];
+            disposalMethod = (gcPacked >> 2) & 0x07;
+            const hasTransparency = (gcPacked & 0x01) !== 0;
+            delay = (data[pos] | (data[pos + 1] << 8)) * 10;
+            pos += 2;
+            transparentIndex = hasTransparency ? data[pos++] : -1;
+            pos++;
+          } else {
+            while (data[pos] !== 0) {
+              pos += data[pos] + 1;
+            }
+            pos++;
+          }
+        } else if (blockType === 0x2C) {
+          const left = data[pos] | (data[pos + 1] << 8);
+          const top = data[pos + 2] | (data[pos + 3] << 8);
+          const frameWidth = data[pos + 4] | (data[pos + 5] << 8);
+          const frameHeight = data[pos + 6] | (data[pos + 7] << 8);
+          pos += 8;
+
+          const imgPacked = data[pos++];
+          const hasLCT = (imgPacked & 0x80) !== 0;
+          const interlaced = (imgPacked & 0x40) !== 0;
+          const lctSize = hasLCT ? 3 * Math.pow(2, (imgPacked & 0x07) + 1) : 0;
+
+          let colorTable = globalColorTable;
+          if (hasLCT) {
+            colorTable = data.slice(pos, pos + lctSize);
+            pos += lctSize;
+          }
+
+          const minCodeSize = data[pos++];
+          let lzwData = [];
+          while (data[pos] !== 0) {
+            const subBlockSize = data[pos++];
+            for (let i = 0; i < subBlockSize; i++) {
+              lzwData.push(data[pos++]);
+            }
+          }
+          pos++;
+
+          const pixels = decodeLZW(lzwData, minCodeSize, frameWidth * frameHeight);
+
+          if (disposalMethod === 2) {
+            tempCtx.clearRect(0, 0, width, height);
+          } else if (disposalMethod === 3 && previousImageData) {
+            tempCtx.putImageData(previousImageData, 0, 0);
+          }
+
+          if (disposalMethod === 3) {
+            previousImageData = tempCtx.getImageData(0, 0, width, height);
+          }
+
+          const imageData = tempCtx.getImageData(0, 0, width, height);
+          const frameData = imageData.data;
+
+          for (let y = 0; y < frameHeight; y++) {
+            for (let x = 0; x < frameWidth; x++) {
+              let srcY = y;
+              if (interlaced) {
+                srcY = deinterlace(y, frameHeight);
+              }
+
+              const pixelIndex = srcY * frameWidth + x;
+              const colorIndex = pixels[pixelIndex];
+
+              if (colorIndex === transparentIndex) continue;
+
+              const destX = left + x;
+              const destY = top + y;
+              if (destX >= width || destY >= height) continue;
+
+              const destIndex = (destY * width + destX) * 4;
+              const colorOffset = colorIndex * 3;
+
+              if (colorTable && colorOffset + 2 < colorTable.length) {
+                frameData[destIndex] = colorTable[colorOffset];
+                frameData[destIndex + 1] = colorTable[colorOffset + 1];
+                frameData[destIndex + 2] = colorTable[colorOffset + 2];
+                frameData[destIndex + 3] = 255;
+              }
+            }
+          }
+
+          tempCtx.putImageData(imageData, 0, 0);
+
+          frames.push({
+            imageData: tempCtx.getImageData(0, 0, width, height),
+            width,
+            height,
+            delay: delay || 100,
+          });
+
+          transparentIndex = -1;
+          delay = 100;
+
+        } else if (blockType === 0x3B) {
+          break;
+        } else if (blockType === 0x00) {
+          continue;
+        } else {
+          break;
+        }
+      }
+
+      return frames;
+    }
+
+    function decodeLZW(data, minCodeSize, pixelCount) {
+      const clearCode = 1 << minCodeSize;
+      const endCode = clearCode + 1;
+      let codeSize = minCodeSize + 1;
+      let codeMask = (1 << codeSize) - 1;
+
+      let codeTable = [];
+      for (let i = 0; i < clearCode; i++) {
+        codeTable[i] = [i];
+      }
+      codeTable[clearCode] = [];
+      codeTable[endCode] = [];
+
+      let nextCode = endCode + 1;
+      let bitBuffer = 0;
+      let bitCount = 0;
+      let dataPos = 0;
+      let pixels = [];
+      let prevCode = -1;
+
+      function readCode() {
+        while (bitCount < codeSize && dataPos < data.length) {
+          bitBuffer |= data[dataPos++] << bitCount;
+          bitCount += 8;
+        }
+        const code = bitBuffer & codeMask;
+        bitBuffer >>= codeSize;
+        bitCount -= codeSize;
+        return code;
+      }
+
+      while (pixels.length < pixelCount && dataPos < data.length) {
+        const code = readCode();
+
+        if (code === clearCode) {
+          codeSize = minCodeSize + 1;
+          codeMask = (1 << codeSize) - 1;
+          codeTable = [];
+          for (let i = 0; i < clearCode; i++) {
+            codeTable[i] = [i];
+          }
+          codeTable[clearCode] = [];
+          codeTable[endCode] = [];
+          nextCode = endCode + 1;
+          prevCode = -1;
+          continue;
+        }
+
+        if (code === endCode) {
+          break;
+        }
+
+        let entry;
+        if (code < codeTable.length && codeTable[code]) {
+          entry = codeTable[code];
+        } else if (code === nextCode && prevCode >= 0) {
+          entry = [...codeTable[prevCode], codeTable[prevCode][0]];
+        } else {
+          break;
+        }
+
+        pixels.push(...entry);
+
+        if (prevCode >= 0 && nextCode < 4096) {
+          codeTable[nextCode++] = [...codeTable[prevCode], entry[0]];
+
+          if (nextCode > codeMask && codeSize < 12) {
+            codeSize++;
+            codeMask = (1 << codeSize) - 1;
+          }
+        }
+
+        prevCode = code;
+      }
+
+      return pixels;
+    }
+
+    function deinterlace(y, height) {
+      const pass1 = Math.floor((height + 7) / 8);
+      const pass2 = Math.floor((height + 3) / 8);
+      const pass3 = Math.floor((height + 1) / 4);
+
+      if (y < pass1) return y * 8;
+      if (y < pass1 + pass2) return (y - pass1) * 8 + 4;
+      if (y < pass1 + pass2 + pass3) return (y - pass1 - pass2) * 4 + 2;
+      return (y - pass1 - pass2 - pass3) * 2 + 1;
+    }
+
+    // ===========================================
+    // Event Handlers
+    // ===========================================
+
+    zoomInBtn.addEventListener('click', () => {
+      state.scale = Math.min(state.scale + 0.25, 8);
+      applyScale();
+    });
+
+    zoomOutBtn.addEventListener('click', () => {
+      state.scale = Math.max(state.scale - 0.25, 0.5);
+      applyScale();
+    });
+
+    zoomValue.addEventListener('click', () => {
+      state.scale = state.baseScale;
+      applyScale();
+    });
+
+    fullscreenBtn.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(console.error);
+      } else {
+        document.exitFullscreen();
+      }
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+      const icon = fullscreenBtn.querySelector('.material-symbols-outlined');
+      icon.textContent = document.fullscreenElement ? 'fullscreen_exit' : 'fullscreen';
+    });
+
+    closeBtn.addEventListener('click', () => {
+      window.close();
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      if (state.blobUrl) {
+        const a = document.createElement('a');
+        a.href = state.blobUrl;
+        a.download = state.filename || `chunk-${state.chunkIndex + 1}.gif`;
+        a.click();
+      }
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        window.close();
+      } else if (e.key === '+' || e.key === '=') {
+        zoomInBtn.click();
+      } else if (e.key === '-') {
+        zoomOutBtn.click();
+      } else if (e.key === '0') {
+        zoomValue.click();
+      } else if (e.key === 'f' || e.key === 'F') {
+        fullscreenBtn.click();
+      }
+    });
+
+    // Mouse wheel zoom
+    gifContainer.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const delta = e.deltaY * -0.001;
+      state.scale = Math.min(Math.max(state.scale + delta, 0.5), 8);
+      applyScale();
+    });
+
+    // Window resize - recalculate optimal scale
+    window.addEventListener('resize', () => {
+      if (state.frames.length > 0) {
+        const wasAtBase = Math.abs(state.scale - state.baseScale) < 0.1;
+        calculateOptimalScale(state.frames[0].width, state.frames[0].height);
+        if (wasAtBase) {
+          state.scale = state.baseScale;
+        }
+        applyScale();
+      }
+    });
+
+    // ===========================================
+    // Initialize
+    // ===========================================
+
+    init();
+  </script>
+</body>
+</html>
