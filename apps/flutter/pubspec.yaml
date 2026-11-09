@@ -2,7 +2,7 @@ name: airqr_mobile
 description: "Air-gapped file transfer using animated QR codes."
 publish_to: "none"
 
-version: 1.0.0+10
+version: 1.0.0+11
 
 environment:
   sdk: ^3.10.1
