@@ -19,6 +19,7 @@ import {
 const logger = createLogger('ui:settingsTab');
 
 import { Button, Toggle, Icon, HelpTip } from '../ui';
+import HistoryRetentionSetting from '../settings/HistoryRetentionSetting';
 import { APP_INFO, ECC_OPTIONS, SCANNER_PRESETS } from '../../constants';
 import type { CameraResolution, ECCLevel, LoggingConfig } from '../../types';
 import {
@@ -1306,6 +1307,11 @@ const SettingsTab: React.FC = () => {
               onChange={(autoSyncHistory) => setUploadConfig({ autoSyncHistory })}
               className="py-3 border-t airqr-settings-divider"
             />
+
+            {/* History retention lives on the server, so it needs a working connection */}
+            {uploadConfig.enabled && serverAuthReady && (
+              <HistoryRetentionSetting uploadConfig={uploadConfig} />
+            )}
 
             {/* Connection and Sync buttons */}
             <div className="pt-4 border-t airqr-settings-divider">
