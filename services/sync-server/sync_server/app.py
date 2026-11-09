@@ -19,7 +19,7 @@ from .exporter import ExportManager
 from .handler import ServerContext, create_handler
 from .migration import migrate_json_to_sqlite
 from .observability import build_startup_summary, format_kv_log
-from .retention import apply_retention
+from .retention import RetentionSweepResult, apply_retention, resolve_history_retention
 from .settings_store import SettingsStore
 from .sqlite_storage import SqliteStorage
 from .storage import Storage
@@ -28,6 +28,28 @@ from .ws_scan_handler import handle_scan_client
 from .ws_scan_session import ScanSessionStore
 
 logger = logging.getLogger(__name__)
+
+RETENTION_SWEEP_INTERVAL_SECONDS = 24 * 60 * 60
+
+
+def start_retention_scheduler(
+    sweep: Callable[[], object], interval_seconds: float
+) -> threading.Event:
+    """Run `sweep` every `interval_seconds` on a daemon thread.
+
+    Set the returned event to stop the loop.
+    """
+    stop = threading.Event()
+
+    def loop() -> None:
+        while not stop.wait(interval_seconds):
+            try:
+                sweep()
+            except Exception:
+                logger.exception("Scheduled retention sweep failed")
+
+    threading.Thread(target=loop, name="airqr-retention", daemon=True).start()
+    return stop
 
 _INVALID_SESSION_RESPONSE_BODY = b"Invalid session ID\n"
 
@@ -350,20 +372,32 @@ def run_server(config: ServerConfig) -> int:
         storage = Storage(config.storage_dir)
 
     storage.ensure_dirs()
-    retention_result = apply_retention(
-        storage,
-        retention_incomplete_days=config.retention_incomplete_days,
-        retention_history_days=config.retention_history_days,
-    )
-    logger.info(
-        format_kv_log(
-            "server.retention",
-            deleted_incomplete_sessions=retention_result.deleted_incomplete_sessions,
-            deleted_history_items=retention_result.deleted_history_items,
-            retention_incomplete_days=config.retention_incomplete_days,
-            retention_history_days=config.retention_history_days,
+    settings_store = SettingsStore(config.storage_dir / "app_settings.json")
+
+    def run_retention_sweep() -> RetentionSweepResult:
+        # Re-read the settings each time so a change from the UI applies
+        # at the next sweep without a restart.
+        history_days, history_source = resolve_history_retention(
+            settings_store.load(), default_days=config.retention_history_days
         )
-    )
+        result = apply_retention(
+            storage,
+            retention_incomplete_days=config.retention_incomplete_days,
+            retention_history_days=history_days,
+        )
+        logger.info(
+            format_kv_log(
+                "server.retention",
+                deleted_incomplete_sessions=result.deleted_incomplete_sessions,
+                deleted_history_items=result.deleted_history_items,
+                retention_incomplete_days=config.retention_incomplete_days,
+                retention_history_days="never" if history_days is None else history_days,
+                retention_history_source=history_source,
+            )
+        )
+        return result
+
+    retention_result = run_retention_sweep()
 
     from .auth import RateLimiter
     rate_limiter = RateLimiter(max_attempts=5, window_seconds=60)
@@ -373,7 +407,6 @@ def run_server(config: ServerConfig) -> int:
         trusted_proxies=config.trusted_proxies,
     )
     export_manager = ExportManager(config.storage_dir / "export_config.json", config.export_dir)
-    settings_store = SettingsStore(config.storage_dir / "app_settings.json")
     event_hub = EventHub()
     ws_hub: Optional[WebSocketEventHub] = None
     scan_session_store: Optional[ScanSessionStore] = None
@@ -419,6 +452,7 @@ def run_server(config: ServerConfig) -> int:
         verbose=config.verbose,
         rate_limiter=rate_limiter,
         trusted_proxies=config.trusted_proxies,
+        retention_history_default_days=config.retention_history_days,
     )
 
     server = create_server(config, context)
@@ -435,10 +469,14 @@ def run_server(config: ServerConfig) -> int:
     )
     logger.info(format_kv_log("server.start", **startup_summary))
 
+    stop_retention = start_retention_scheduler(
+        run_retention_sweep, RETENTION_SWEEP_INTERVAL_SECONDS
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        stop_retention.set()
         server.server_close()
     return 0

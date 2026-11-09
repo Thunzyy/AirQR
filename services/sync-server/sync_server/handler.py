@@ -91,6 +91,8 @@ class ServerContext:
     verbose: bool
     rate_limiter: Optional["RateLimiter"] = None
     trusted_proxies: list[str] = field(default_factory=list)
+    # The --retention-history flag; a saved `retention` setting overrides it.
+    retention_history_default_days: Optional[int] = None
     debug_scan_store: DebugScanSnapshotStore = field(
         default_factory=DebugScanSnapshotStore
     )

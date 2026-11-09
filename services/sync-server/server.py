@@ -125,7 +125,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--retention-history",
         type=int,
         default=None,
-        help="Days to keep history items (default: 30)",
+        help=(
+            "Days to keep history items (default: 30; 0 = never delete). "
+            "A retention saved from the app Settings overrides it."
+        ),
     )
     parser.add_argument(
         "--trusted-proxy",
