@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "../../components/ui/Icon";
+import { useConfirmDialog } from "../../components/ui/useConfirmDialog";
 import { globalHas } from "../../parse/wire";
 import type { HistoryItem, IncompleteScanItem } from "../../types";
 import { formatDateCategory, resolveIncompleteScanName } from "../../utils/format";
@@ -132,6 +133,7 @@ const History: React.FC<HistoryProps> = ({
     () => new Set()
   );
   const filterCountIdPrefix = useId();
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const exitSelectionMode = () => {
     setSelectionMode(false);
@@ -297,9 +299,15 @@ const History: React.FC<HistoryProps> = ({
     setSelectedIncompleteIds(new Set(filteredIncompleteItems.map((item) => item.sessionId)));
   };
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     if (selectedCount === 0) return;
-    if (!window.confirm(t("history.bulkDeleteConfirm", { count: selectedCount }))) {
+    const confirmed = await confirm({
+      title: t("history.bulkDeleteTitle", { count: selectedCount }),
+      message: t("history.bulkDeleteMessage"),
+      confirmLabel: t("common.delete"),
+      tone: "danger",
+    });
+    if (!confirmed) {
       return;
     }
     selectedItems.forEach((item) => onDelete?.(item));
@@ -923,6 +931,7 @@ const History: React.FC<HistoryProps> = ({
           </div>
         ))}
       </main>
+      {confirmDialog}
     </div>
   );
 };

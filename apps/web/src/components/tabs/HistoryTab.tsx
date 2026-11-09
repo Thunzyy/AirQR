@@ -23,6 +23,7 @@ import { formatDateCategory, formatSize, formatScanDisplayName } from '../../uti
 import { unzipFilesInWorker, zipFilesInWorker } from '../../utils/zipWorker';
 import { ServerFileNotFoundError } from '../../services/serverErrors';
 import Icon from '../ui/Icon';
+import { useConfirmDialog } from '../ui/useConfirmDialog';
 import NoteCodeViewer from '../note/NoteCodeViewer';
 import type {
   HistoryItem,
@@ -155,6 +156,7 @@ const HistoryTab: React.FC = () => {
   } = useHistoryStore();
   const { uploadConfig } = useSettingsStore();
   const showToast = useToastStore((s) => s.show);
+  const { confirm, confirmDialog } = useConfirmDialog();
   const { url: serverUrl } = uploadConfig;
   const serverScope = useMemo(
     () => getRemoteHistoryServerScope(serverUrl),
@@ -2056,13 +2058,16 @@ const HistoryTab: React.FC = () => {
     const canDeleteRemoteHistory = shouldSyncRef.current;
     const hasRemoteHistory =
       remoteItemsRef.current.length > 0 || remoteIncompleteItemsRef.current.length > 0;
-    const confirmed = window.confirm(
-      t(
+    const confirmed = await confirm({
+      title: t('history.clearHistoryTitle'),
+      message: t(
         canDeleteRemoteHistory && hasRemoteHistory
           ? 'history.clearHistoryConfirmRemote'
           : 'history.clearHistoryConfirmLocal'
-      )
-    );
+      ),
+      confirmLabel: t('common.clear'),
+      tone: 'danger',
+    });
 
     if (!confirmed) {
       return;
@@ -2127,7 +2132,7 @@ const HistoryTab: React.FC = () => {
     } finally {
       setIsClearingHistory(false);
     }
-  }, [clearHistoryState, showToast, t]);
+  }, [clearHistoryState, confirm, showToast, t]);
 
   const handleView = async (item: HistoryItem) => {
     const result = await resolveHistoryItemData(item);
@@ -2375,6 +2380,7 @@ const HistoryTab: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full">
+      {confirmDialog}
       <History
         items={displayItems}
         incompleteItems={displayIncompleteItems}

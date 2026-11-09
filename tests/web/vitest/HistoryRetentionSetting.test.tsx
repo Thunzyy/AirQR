@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const { fetchHistoryRetentionMock, saveHistoryRetentionMock } = vi.hoisted(() => ({
@@ -57,21 +57,18 @@ describe("HistoryRetentionSetting", () => {
       source: "settings",
       defaultHistoryDays: 90,
     });
-    const confirmSpy = vi.spyOn(window, "confirm");
-
     render(<HistoryRetentionSetting uploadConfig={uploadConfig} />);
     await userEvent.click(await screen.findByRole("switch", { name: "Never delete history" }));
 
     expect(screen.getByRole("spinbutton", { name: "Delete history after (days)" })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "Save retention" }));
 
-    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(saveHistoryRetentionMock).toHaveBeenCalledWith(
       expect.objectContaining({ url: uploadConfig.url }),
       null
     );
     expect(await screen.findByText("Retention saved.")).toBeInTheDocument();
-    confirmSpy.mockRestore();
   });
 
   it("asks before shortening the retention", async () => {
@@ -80,19 +77,32 @@ describe("HistoryRetentionSetting", () => {
       source: "server-default",
       defaultHistoryDays: 90,
     });
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
-
     render(<HistoryRetentionSetting uploadConfig={uploadConfig} />);
     const input = await screen.findByRole("spinbutton", { name: "Delete history after (days)" });
     await userEvent.clear(input);
     await userEvent.type(input, "30");
     await userEvent.click(screen.getByRole("button", { name: "Save retention" }));
 
-    expect(confirmSpy).toHaveBeenCalledWith(
-      "History entries older than 30 days will be deleted at the next cleanup. Continue?"
+    const dialog = screen.getByRole("alertdialog", { name: "Shorten the retention?" });
+    expect(dialog).toHaveAccessibleDescription(
+      "History entries older than 30 days will be deleted at the next cleanup."
     );
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(saveHistoryRetentionMock).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
+
+    saveHistoryRetentionMock.mockResolvedValue({
+      historyDays: 30,
+      source: "settings",
+      defaultHistoryDays: 90,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Save retention" }));
+    await userEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", { name: "Shorten" })
+    );
+    expect(saveHistoryRetentionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ url: uploadConfig.url }),
+      30
+    );
   });
 
   it("refuses values outside 1 to 3650 days", async () => {

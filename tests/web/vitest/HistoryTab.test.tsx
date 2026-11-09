@@ -2464,7 +2464,7 @@ describe("HistoryTab", () => {
   });
 
   it("clears local and remote history after confirmation", async () => {
-    const confirmMock = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const nativeConfirm = vi.spyOn(window, "confirm");
 
     useHistoryStore.setState({
       items: [
@@ -2528,11 +2528,18 @@ describe("HistoryTab", () => {
       expect(fetchServerHistoryMock).toHaveBeenCalled();
     });
 
+    let clearing: Promise<void> | undefined;
+    act(() => {
+      clearing = getHistoryProps()?.onClearHistory?.();
+    });
+    const dialog = await screen.findByRole("alertdialog", { name: "Clear history?" });
+    expect(deleteServerHistoryItemMock).not.toHaveBeenCalled();
     await act(async () => {
-      await getHistoryProps()?.onClearHistory?.();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Clear" }));
+      await clearing;
     });
 
-    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(nativeConfirm).not.toHaveBeenCalled();
     expect(deleteServerHistoryItemMock).toHaveBeenCalledWith(
       expect.any(Object),
       "remote-generated-1"
@@ -2544,7 +2551,7 @@ describe("HistoryTab", () => {
     expect(useHistoryStore.getState().items).toEqual([]);
     expect(useHistoryStore.getState().incompleteItems).toEqual([]);
 
-    confirmMock.mockRestore();
+    nativeConfirm.mockRestore();
   });
 
   it("resumes a local packet-backed session without rewriting persisted packet pages", async () => {
