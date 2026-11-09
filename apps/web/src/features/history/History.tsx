@@ -762,7 +762,7 @@ const History: React.FC<HistoryProps> = ({
                   <div
                     key={item.sessionId}
                     className={`airqr-liquid-card group relative flex cursor-pointer flex-col overflow-hidden rounded-[30px] transition-all hover:bg-[var(--airqr-action-hover)] ${
-                      isSelected ? "outline outline-2 -outline-offset-2 outline-[var(--airqr-accent-text)]" : ""
+                      isSelected ? "outline outline-2 outline-offset-0 outline-[var(--airqr-accent-text)]" : ""
                     }`}
                     style={ITEM_VISIBILITY_STYLE}
                     onClick={() =>
@@ -927,14 +927,20 @@ const HistorySelectionCheckbox: React.FC<{
   label: string;
   onToggle: () => void;
 }> = ({ checked, label, onToggle }) => (
-  <input
-    type="checkbox"
-    checked={checked}
-    onChange={onToggle}
-    onClick={(e) => e.stopPropagation()}
-    aria-label={label}
-    className="size-5 shrink-0 cursor-pointer accent-[var(--airqr-accent-text)]"
-  />
+  <span className="relative flex size-6 shrink-0 items-center justify-center">
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={onToggle}
+      onClick={(e) => e.stopPropagation()}
+      aria-label={label}
+      className="peer size-6 cursor-pointer appearance-none rounded-full border-2 border-[var(--airqr-text-muted)] transition-colors duration-150 checked:border-[var(--airqr-accent-text)] checked:bg-[var(--airqr-accent-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--airqr-accent-text)]"
+    />
+    <Icon
+      name="check"
+      className="pointer-events-none absolute scale-50 text-[14px] text-[var(--airqr-card-surface)] opacity-0 transition duration-150 peer-checked:scale-100 peer-checked:opacity-100 motion-reduce:transition-none"
+    />
+  </span>
 );
 
 const HistoryListItem: React.FC<{
@@ -983,7 +989,7 @@ const HistoryListItem: React.FC<{
   return (
     <div
       className={`airqr-liquid-card group relative flex cursor-pointer items-center gap-3 rounded-[28px] p-3 transition-all hover:bg-[var(--airqr-card-hover)] ${
-        selected ? "outline outline-2 -outline-offset-2 outline-[var(--airqr-accent-text)]" : ""
+        selected ? "outline outline-2 outline-offset-0 outline-[var(--airqr-accent-text)]" : ""
       }`}
       style={ITEM_VISIBILITY_STYLE}
       onClick={handleRowClick}

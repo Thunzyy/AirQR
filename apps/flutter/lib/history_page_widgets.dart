@@ -1381,18 +1381,59 @@ class HistorySelectionCheckbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final onChanged = this.onChanged;
+    final accent = AirQrTheme.accentText(context);
+    final duration = _historyAnimationDuration(
+      context,
+      const Duration(milliseconds: 150),
+    );
+    // Round 24dp control centered in a 44dp tap target (mirrors web).
     return Semantics(
+      container: true,
+      checked: selected,
+      enabled: onChanged != null,
       label: semanticLabel,
-      child: Checkbox(
-        value: selected,
-        onChanged: onChanged == null ? null : (_) => onChanged(),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
-        activeColor: AirQrTheme.accentBlue,
-        checkColor: Colors.white,
-        side: BorderSide(color: AirQrTheme.textMuted(context), width: 1.5),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      onTap: onChanged,
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onChanged,
+          child: SizedBox.square(
+            dimension: 44,
+            child: Center(
+              child: AnimatedContainer(
+                duration: duration,
+                curve: Curves.easeOut,
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: selected ? accent : Colors.transparent,
+                  border: Border.all(
+                    color: selected ? accent : AirQrTheme.textMuted(context),
+                    width: 2,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: AnimatedOpacity(
+                  duration: duration,
+                  curve: Curves.easeOut,
+                  opacity: selected ? 1 : 0,
+                  child: AnimatedScale(
+                    duration: duration,
+                    curve: Curves.easeOut,
+                    scale: selected ? 1 : 0.5,
+                    child: AirQrIcon(
+                      'check',
+                      size: 14,
+                      color: AirQrTheme.card(context),
+                      exactColor: true,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

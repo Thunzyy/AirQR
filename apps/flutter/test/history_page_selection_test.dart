@@ -62,7 +62,7 @@ void main() {
       expect(find.byType(HistorySelectionBar), findsOneWidget);
       expect(find.byType(HistorySearchToolbar), findsNothing);
       expect(find.text('1 selected'), findsOneWidget);
-      expect(find.byType(Checkbox), findsNWidgets(4));
+      expect(find.byType(HistorySelectionCheckbox), findsNWidgets(4));
       expect(find.byType(Dismissible), findsNothing);
 
       await tester.tap(find.text('bravo.bin'));
@@ -86,7 +86,7 @@ void main() {
       await tester.pump();
       expect(find.byType(HistorySelectionBar), findsNothing);
       expect(find.byType(HistorySearchToolbar), findsOneWidget);
-      expect(find.byType(Checkbox), findsNothing);
+      expect(find.byType(HistorySelectionCheckbox), findsNothing);
     });
 
     testWidgets('tapping an incomplete scan in selection mode never resumes', (
