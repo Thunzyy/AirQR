@@ -260,6 +260,45 @@ describe("Server Sync Service", () => {
 
       expect(result.totalCount).toBe(150);
     });
+
+    it("passes the page offset and reads per-origin totals", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([]),
+        headers: new Headers({
+          "X-Total-Count": "5600",
+          "X-Total-Count-Scanned": "5554",
+          "X-Total-Count-Generated": "46",
+        }),
+      });
+
+      const result = await fetchServerHistory(mockConfig, { limit: 500, offset: 1000 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining("offset=1000"),
+        expect.any(Object)
+      );
+      expect(result.totalCount).toBe(5600);
+      expect(result.originTotals).toEqual({ scanned: 5554, generated: 46 });
+    });
+
+    it("omits a zero offset and origin totals the server does not send", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([]),
+        headers: new Headers({ "X-Total-Count": "3" }),
+      });
+
+      const result = await fetchServerHistory(mockConfig, { limit: 500, offset: 0 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.not.stringContaining("offset="),
+        expect.any(Object)
+      );
+      expect(result.originTotals).toBeUndefined();
+    });
   });
 
   describe("fetchServerSession", () => {

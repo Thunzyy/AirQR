@@ -324,6 +324,7 @@ const en = {
     selectItems: 'Select items',
     cancelSelection: 'Cancel selection',
     selectedCount: '{{count}} selected',
+    loadingMore: 'Loading more history…',
     selectAll: 'Select all',
     deselectAll: 'Deselect all',
     deleteSelected: 'Delete selected',

@@ -356,8 +356,16 @@ def _apply_history_response(
     entries: list[dict[str, Any]],
     *,
     total_count: int | None = None,
+    etag_entries: list[dict[str, Any]] | None = None,
+    etag_scope: str | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> None:
-    etag, latest_dt = build_history_etag(entries)
+    # The ETag covers the whole filtered list, so a change outside the
+    # requested page (a delete further down) still invalidates page one.
+    etag, latest_dt = build_history_etag(
+        entries if etag_entries is None else etag_entries,
+        scope=etag_scope,
+    )
     if latest_dt and latest_dt.tzinfo is None:
         latest_dt = latest_dt.replace(tzinfo=timezone.utc)
 
@@ -375,6 +383,8 @@ def _apply_history_response(
         "Cache-Control": "no-cache",
         "X-Total-Count": str(len(entries) if total_count is None else total_count),
     }
+    if extra_headers:
+        headers.update(extra_headers)
     if latest_dt:
         headers["Last-Modified"] = format_datetime(latest_dt)
 
@@ -478,10 +488,35 @@ def handle_history_all(handler: "SyncRequestHandler") -> None:
         reverse=True,
     )
     total_count = len(entries)
-    if limit:
-        entries = entries[:limit]
+    origin_counts = {"scanned": 0, "generated": 0}
+    for entry in entries:
+        origin = entry.get("origin")
+        if origin in origin_counts:
+            origin_counts[origin] += 1
+    offset = _parse_history_offset(params)
+    page = entries[offset : offset + limit] if limit else entries[offset:]
 
-    _apply_history_response(handler, entries, total_count=total_count)
+    _apply_history_response(
+        handler,
+        page,
+        total_count=total_count,
+        etag_entries=entries,
+        etag_scope=f"{offset}:{limit}",
+        extra_headers={
+            "X-Total-Count-Scanned": str(origin_counts["scanned"]),
+            "X-Total-Count-Generated": str(origin_counts["generated"]),
+        },
+    )
+
+
+def _parse_history_offset(params: dict[str, list[str]]) -> int:
+    raw = _first_query_value(params, "offset")
+    if raw in (None, ""):
+        return 0
+    try:
+        return max(0, int(raw))
+    except (TypeError, ValueError):
+        return 0
 
 
 def handle_packets(handler: "SyncRequestHandler", session_id: str) -> None:

@@ -154,3 +154,24 @@ def test_handle_options_returns_no_content() -> None:
 
     handler.send_response.assert_called_once_with(HTTPStatus.NO_CONTENT)
     handler.end_headers.assert_called_once_with()
+
+
+def test_apply_surface_headers_exposes_history_paging_headers_to_cors_clients() -> None:
+    handler = _surface_handler(
+        path="/api/history",
+        origin="https://app.local",
+        allowed_origins=["https://app.local"],
+        auth_enabled=True,
+    )
+
+    apply_surface_headers(handler)
+
+    calls = [call.args for call in handler.send_header.call_args_list]
+    exposed = dict(calls).get("Access-Control-Expose-Headers", "")
+    for header in (
+        "ETag",
+        "X-Total-Count",
+        "X-Total-Count-Scanned",
+        "X-Total-Count-Generated",
+    ):
+        assert header in exposed

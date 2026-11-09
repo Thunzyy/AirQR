@@ -69,11 +69,14 @@ export interface ServerHistoryResponse {
   lastModified?: string;
   notModified?: boolean;
   totalCount?: number;
+  /** Whole-history counts per origin, independent of limit/offset. */
+  originTotals?: { scanned?: number; generated?: number };
 }
 
 export interface ServerHistoryOptions {
   etag?: string;
   limit?: number;
+  offset?: number;
   origin?: 'scanned' | 'generated' | 'all';
   includeIncomplete?: boolean;
 }
@@ -241,6 +244,9 @@ export async function fetchServerHistory(
   if (options?.limit) {
     params.set('limit', String(options.limit));
   }
+  if (options?.offset && options.offset > 0) {
+    params.set('offset', String(Math.trunc(options.offset)));
+  }
   if (options?.origin && options.origin !== 'all') {
     params.set('origin', options.origin);
   }
@@ -277,13 +283,22 @@ export async function fetchServerHistory(
 
   // SAFETY: /api/history returns an array of history entries.
   const data = (await response.json()) as ServerHistoryEntry[];
-  const totalCountHeader = response.headers.get('X-Total-Count');
-  const totalCount = totalCountHeader ? Number(totalCountHeader) : undefined;
+  const readCountHeader = (name: string): number | undefined => {
+    const raw = response.headers.get(name);
+    const value = raw ? Number(raw) : NaN;
+    return Number.isFinite(value) ? value : undefined;
+  };
+  const scannedTotal = readCountHeader('X-Total-Count-Scanned');
+  const generatedTotal = readCountHeader('X-Total-Count-Generated');
   return {
     entries: Array.isArray(data) ? data : [],
     etag: response.headers.get('ETag') || undefined,
     lastModified: response.headers.get('Last-Modified') || undefined,
-    totalCount: Number.isFinite(totalCount ?? NaN) ? totalCount : undefined,
+    totalCount: readCountHeader('X-Total-Count'),
+    originTotals:
+      scannedTotal === undefined && generatedTotal === undefined
+        ? undefined
+        : { scanned: scannedTotal, generated: generatedTotal },
   };
 }
 

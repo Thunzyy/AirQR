@@ -5,7 +5,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useTranslation } from 'react-i18next';
-import History from '../../features/history/History';
+import History, { type HistoryServerTotals } from '../../features/history/History';
 import QrGifViewer from '../media/QrGifViewer';
 import { useHistoryStore, useSettingsStore, useToastStore } from '../../store';
 import {
@@ -112,6 +112,8 @@ import {
 
 const logger = createLogger('ui:historyTab');
 const REMOTE_RESUME_PACKET_FETCH_LIMIT = 1024;
+/** Server history entries fetched per request; more pages load as the list scrolls. */
+const REMOTE_HISTORY_PAGE_SIZE = 500;
 type RemotePacketHydrationOptions = {
   authority?: ResumeAuthority;
 };
@@ -179,6 +181,14 @@ const HistoryTab: React.FC = () => {
   const [remoteHistoryReady, setRemoteHistoryReady] = useState(false);
   const [remoteSyncReachable, setRemoteSyncReachable] = useState(false);
   const historyEtagRef = useRef<string | null>(null);
+  // How many server entries the list should hold; grows one page per load-more.
+  const remoteHistoryWindowRef = useRef(REMOTE_HISTORY_PAGE_SIZE);
+  const loadMoreRemoteHistoryRef = useRef<(() => void) | null>(null);
+  const refreshRemoteHistoryRef = useRef<(() => void) | null>(null);
+  const [remoteHistoryTotals, setRemoteHistoryTotals] =
+    useState<HistoryServerTotals | null>(null);
+  const [remoteHistoryHasMore, setRemoteHistoryHasMore] = useState(false);
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
   const itemsRef = useRef(items);
   const incompleteItemsRef = useRef(incompleteItems);
   const remoteItemsRef = useRef(remoteItems);
@@ -665,12 +675,16 @@ const HistoryTab: React.FC = () => {
       wsService.disconnect();
       setRemoteItems([]);
       setRemoteIncompleteItems([]);
+      setRemoteHistoryTotals(null);
+      setRemoteHistoryHasMore(false);
+      setIsLoadingMoreHistory(false);
       return () => {
         cancelled = true;
       };
     }
 
     historyEtagRef.current = null;
+    remoteHistoryWindowRef.current = REMOTE_HISTORY_PAGE_SIZE;
     setRemoteHistoryReady(false);
     setRemoteSyncReachable(false);
 
@@ -684,9 +698,12 @@ const HistoryTab: React.FC = () => {
       const tombstoneWatermark = captureRemoteHistoryTombstoneVersion();
 
       try {
+        // The first page carries the ETag, which the server computes over
+        // the whole history, so a 304 means no loaded page changed either.
         const result = await fetchServerHistory(effectUploadConfig, {
           etag: historyEtagRef.current || undefined,
-          limit: 500,
+          limit: REMOTE_HISTORY_PAGE_SIZE,
+          offset: 0,
         });
         if (cancelled) return;
 
@@ -694,12 +711,59 @@ const HistoryTab: React.FC = () => {
           return;
         }
 
+        const entryKey = (entry: (typeof result.entries)[number]) =>
+          `${entry.origin}:${entry.historyId || entry.sessionId || entry.id}`;
+        const entries = [...result.entries];
+        const loadedEntryKeys = new Set(entries.map(entryKey));
+        let serverTotal = result.totalCount;
+        let nextOffset = result.entries.length;
+        let pagingStalled = false;
+        while (
+          serverTotal !== undefined &&
+          nextOffset < serverTotal &&
+          entries.length < remoteHistoryWindowRef.current
+        ) {
+          const page = await fetchServerHistory(effectUploadConfig, {
+            limit: REMOTE_HISTORY_PAGE_SIZE,
+            offset: nextOffset,
+          });
+          if (cancelled) return;
+          if (page.totalCount !== undefined) {
+            serverTotal = page.totalCount;
+          }
+          nextOffset += page.entries.length;
+          let added = 0;
+          for (const entry of page.entries) {
+            // Pages can shift when entries are added or deleted in between.
+            const key = entryKey(entry);
+            if (loadedEntryKeys.has(key)) continue;
+            loadedEntryKeys.add(key);
+            entries.push(entry);
+            added += 1;
+          }
+          if (added === 0) {
+            // A server without offset support repeats the first page.
+            pagingStalled = true;
+            break;
+          }
+        }
+
         if (result.etag) {
           historyEtagRef.current = result.etag;
         }
         setRemoteSyncReachable(true);
-
-        const entries = result.entries;
+        setRemoteHistoryHasMore(
+          !pagingStalled && serverTotal !== undefined && entries.length < serverTotal
+        );
+        setRemoteHistoryTotals(
+          serverTotal !== undefined && result.originTotals
+            ? {
+                all: serverTotal,
+                scanned: result.originTotals.scanned ?? 0,
+                generated: result.originTotals.generated ?? 0,
+              }
+            : null
+        );
         const nextItems: HistoryItem[] = [];
         const nextIncomplete: IncompleteScanItem[] = [];
 
@@ -830,8 +894,8 @@ const HistoryTab: React.FC = () => {
         setRemoteItems(visibleItems);
         setRemoteIncompleteItems(visibleIncomplete);
         const isComplete =
-          result.totalCount === undefined ||
-          result.totalCount <= entries.length;
+          serverTotal === undefined ||
+          serverTotal <= entries.length;
         reconcileRemoteHistoryTombstones(
           serverScope,
           tombstoneWatermark,
@@ -851,6 +915,8 @@ const HistoryTab: React.FC = () => {
           if (historyRefreshQueued) {
             historyRefreshQueued = false;
             void refresh();
+          } else {
+            setIsLoadingMoreHistory(false);
           }
         }
       }
@@ -860,6 +926,18 @@ const HistoryTab: React.FC = () => {
       if (document.visibilityState === 'visible') {
         void refresh();
       }
+    };
+
+    refreshRemoteHistoryRef.current = () => {
+      if (!cancelled) void refresh();
+    };
+    loadMoreRemoteHistoryRef.current = () => {
+      if (cancelled) return;
+      remoteHistoryWindowRef.current += REMOTE_HISTORY_PAGE_SIZE;
+      // Skip the ETag shortcut: the first page is unchanged but we want more.
+      historyEtagRef.current = null;
+      setIsLoadingMoreHistory(true);
+      void refresh();
     };
 
     void refresh();
@@ -980,6 +1058,8 @@ const HistoryTab: React.FC = () => {
 
     return () => {
       cancelled = true;
+      loadMoreRemoteHistoryRef.current = null;
+      refreshRemoteHistoryRef.current = null;
       document.removeEventListener('visibilitychange', handleVisibility);
       unsubscribeWs();
     };
@@ -1366,6 +1446,10 @@ const HistoryTab: React.FC = () => {
     }
   };
 
+  const handleLoadMoreHistory = useCallback(() => {
+    loadMoreRemoteHistoryRef.current?.();
+  }, []);
+
   const handleDelete = (item: HistoryItem) => {
     const allowServerDelete = !item.isLocalOnly && (item.source === 'server' || item.isSynced);
 
@@ -1376,6 +1460,8 @@ const HistoryTab: React.FC = () => {
           .then(() => {
             setRemoteItems((prev) => prev.filter((i) => i.id !== historyId));
             removeItem(item.id);
+            // Pull the new server totals without waiting for the delete event.
+            refreshRemoteHistoryRef.current?.();
           })
           .catch((error) => {
             logger.error('Failed to delete server history item', { error: error instanceof Error ? error.message : String(error) });
@@ -1388,6 +1474,7 @@ const HistoryTab: React.FC = () => {
           .then(() => {
             setRemoteItems((prev) => prev.filter((i) => i.id !== sessionId));
             removeItem(item.id);
+            refreshRemoteHistoryRef.current?.();
           })
           .catch((error) => {
             logger.error('Failed to delete server session', { error: error instanceof Error ? error.message : String(error) });
@@ -2404,6 +2491,10 @@ const HistoryTab: React.FC = () => {
         syncStatusClassName={historySyncStatusBadge.className}
         syncAuthRequired={uploadConfig.enabled && authEnabled && !authorized}
         onOpenSyncSettings={() => setLocation('/settings?scrollTo=sync')}
+        serverTotals={shouldSync ? remoteHistoryTotals ?? undefined : undefined}
+        hasMoreItems={shouldSync && remoteHistoryHasMore}
+        isLoadingMore={isLoadingMoreHistory}
+        onLoadMore={handleLoadMoreHistory}
       />
 
       {historyPreview && (

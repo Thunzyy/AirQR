@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import History from "@web/features/history/History";
 import fr from "@web/i18n/locales/fr";
@@ -564,6 +564,99 @@ describe("History Component", () => {
       expect(screen.getByTestId("history-filter-count-all")).toHaveTextContent("1");
       expect(screen.getByTestId("history-filter-count-scanned")).toHaveTextContent("0");
       expect(screen.getByTestId("history-filter-count-generated")).toHaveTextContent("1");
+    });
+
+    it("shows the server totals instead of the loaded page size", () => {
+      const syncedItems = [
+        { ...mockItems[0], source: "server" as const, isSynced: true },
+        { ...mockItems[1], source: "server" as const, isSynced: true },
+      ];
+      const localOnly = {
+        ...mockItems[1],
+        id: "local-1",
+        title: "local.gif",
+        isLocalOnly: true,
+      };
+
+      render(
+        <History
+          items={[...syncedItems, localOnly]}
+          incompleteItems={[incompleteItem]}
+          serverTotals={{ all: 5600, scanned: 5554, generated: 46 }}
+        />
+      );
+
+      // Server totals plus what only exists on this device.
+      expect(screen.getByTestId("history-filter-count-all")).toHaveTextContent("5602");
+      expect(screen.getByTestId("history-filter-count-scanned")).toHaveTextContent("5555");
+      expect(screen.getByTestId("history-filter-count-generated")).toHaveTextContent("47");
+    });
+
+    it("falls back to loaded counts while a search query is active", async () => {
+      render(
+        <History
+          items={mockItems.map((item) => ({ ...item, isSynced: true }))}
+          serverTotals={{ all: 5600, scanned: 5554, generated: 46 }}
+        />
+      );
+
+      await userEvent.click(screen.getByRole("button", { name: "Search history" }));
+      await userEvent.type(screen.getByRole("searchbox"), "output");
+
+      expect(screen.getByTestId("history-filter-count-all")).toHaveTextContent("1");
+    });
+  });
+
+  describe("infinite loading", () => {
+    type ObserverCallback = (entries: Array<{ isIntersecting: boolean }>) => void;
+    let observers: Array<{ callback: ObserverCallback; disconnect: ReturnType<typeof vi.fn> }>;
+
+    beforeEach(() => {
+      observers = [];
+      vi.stubGlobal(
+        "IntersectionObserver",
+        class {
+          callback: ObserverCallback;
+          disconnect = vi.fn();
+          constructor(callback: ObserverCallback) {
+            this.callback = callback;
+            observers.push(this);
+          }
+          observe() {}
+          unobserve() {}
+          takeRecords() {
+            return [];
+          }
+        }
+      );
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("loads the next page when the end of the list scrolls into view", () => {
+      const onLoadMore = vi.fn();
+      render(<History items={mockItems} hasMoreItems onLoadMore={onLoadMore} />);
+
+      expect(observers).toHaveLength(1);
+      act(() => observers[0].callback([{ isIntersecting: true }]));
+
+      expect(onLoadMore).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not ask for more while a page is loading or when everything is loaded", () => {
+      const onLoadMore = vi.fn();
+      const { rerender } = render(
+        <History items={mockItems} hasMoreItems isLoadingMore onLoadMore={onLoadMore} />
+      );
+      expect(screen.getByText("Loading more history…")).toBeInTheDocument();
+      observers.forEach((observer) => observer.callback([{ isIntersecting: true }]));
+
+      rerender(<History items={mockItems} hasMoreItems={false} onLoadMore={onLoadMore} />);
+      observers.forEach((observer) => observer.callback([{ isIntersecting: true }]));
+
+      expect(onLoadMore).not.toHaveBeenCalled();
     });
   });
 
