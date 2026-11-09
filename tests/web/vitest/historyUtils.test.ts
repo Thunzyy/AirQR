@@ -103,6 +103,22 @@ describe("history utils", () => {
     expect(title).toBe("note (3).md");
   });
 
+  it("stores the date category that matches the item timestamp", () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const create = (timestamp: number) =>
+      createHistoryItem({
+        id: `item-${timestamp}`,
+        origin: "scanned",
+        filename: "scan.bin",
+        fileData: new Uint8Array([1]),
+        timestamp,
+      }).category;
+
+    expect(create(Date.now())).toBe("today");
+    expect(create(Date.now() - DAY)).toBe("yesterday");
+    expect(create(Date.now() - 5 * DAY)).toBe("older");
+  });
+
   it("adds the missing extension a downloaded history file needs", () => {
     expect(resolveHistoryDownloadFilename("capture", "image/gif")).toBe("capture.gif");
     expect(resolveHistoryDownloadFilename("bundle.tar", "application/zip")).toBe("bundle.zip");

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import Icon from "../../components/ui/Icon";
 import { globalHas } from "../../parse/wire";
 import type { HistoryItem, IncompleteScanItem } from "../../types";
-import { resolveIncompleteScanName } from "../../utils/format";
+import { formatDateCategory, resolveIncompleteScanName } from "../../utils/format";
 import {
   isHistoryItemPreviewable,
   resolveHistoryItemSortTimestamp,
@@ -332,7 +332,12 @@ const History: React.FC<HistoryProps> = ({
   // Group items by category for display
   // For "older" items, group by actual date instead
   const groupedItems = filteredItems.reduce<HistoryItemsByCategory>((acc, item) => {
-    let cat: string = item.category || "older";
+    // A stored category goes stale ("today" stays "today" tomorrow), so
+    // derive it from the item's timestamp at render time.
+    const sortTime = Date.parse(resolveHistoryItemSortTimestamp(item));
+    let cat: string = Number.isNaN(sortTime)
+      ? item.category || "older"
+      : formatDateCategory(new Date(sortTime));
     // For older items, use the actual date as the category key
     if (cat === "older" && item.date) {
       cat = item.date; // Use date like "2025-01-25"
