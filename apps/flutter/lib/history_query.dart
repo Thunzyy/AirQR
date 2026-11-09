@@ -15,17 +15,35 @@ List<HistoryItem> filterHistoryItems(
   required String searchQuery,
   required HistorySortOption sortBy,
 }) {
-  var filtered = originFilter == 'all'
-      ? [...items]
-      : items.where((item) => item.origin == originFilter).toList();
-  if (searchQuery.isNotEmpty) {
-    final query = searchQuery.toLowerCase();
-    filtered = filtered.where((item) {
-      final fileName = _historyFileName(item.path).toLowerCase();
-      return fileName.contains(query);
-    }).toList();
-  }
+  final query = searchQuery.toLowerCase();
+  final filtered = items
+      .where((item) => _historyItemMatches(item, originFilter, query))
+      .toList();
   return sortHistoryItems(filtered, sortBy: sortBy);
+}
+
+/// Number of items [filterHistoryItems] would return, without sorting.
+int countHistoryItems(
+  List<HistoryItem> items, {
+  required String originFilter,
+  required String searchQuery,
+}) {
+  final query = searchQuery.toLowerCase();
+  var count = 0;
+  for (final item in items) {
+    if (_historyItemMatches(item, originFilter, query)) count++;
+  }
+  return count;
+}
+
+bool _historyItemMatches(
+  HistoryItem item,
+  String originFilter,
+  String lowerQuery,
+) {
+  if (originFilter != 'all' && item.origin != originFilter) return false;
+  if (lowerQuery.isEmpty) return true;
+  return _historyFileName(item.path).toLowerCase().contains(lowerQuery);
 }
 
 Map<String, List<HistoryItem>> groupHistoryItems(List<HistoryItem> items) {

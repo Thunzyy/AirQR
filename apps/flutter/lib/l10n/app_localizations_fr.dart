@@ -1667,6 +1667,74 @@ class AppLocalizationsFr extends AppLocalizations {
       'Suppression côté serveur impossible.';
 
   @override
+  String history_selectedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sélectionnés',
+      one: '$count sélectionné',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get history_selectAll => 'Tout sélectionner';
+
+  @override
+  String get history_deselectAll => 'Tout désélectionner';
+
+  @override
+  String get history_exitSelection => 'Quitter la sélection';
+
+  @override
+  String history_bulkDeleteTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Supprimer $count éléments ?',
+      one: 'Supprimer $count élément ?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get history_bulkDeleteMessage =>
+      'Les fichiers et scans incomplets sélectionnés seront définitivement supprimés.';
+
+  @override
+  String history_bulkDeleted(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count éléments supprimés',
+      one: '$count élément supprimé',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String history_bulkSyncQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count éléments en attente de synchronisation',
+      one: '$count élément en attente de synchronisation',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String history_bulkKeptLocal(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count éléments désormais stockés en local uniquement',
+      one: '$count élément désormais stocké en local uniquement',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String scanner_cameraListFailed(String error) {
     return 'Impossible de lister les caméras : $error';
   }

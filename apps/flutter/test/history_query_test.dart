@@ -109,4 +109,46 @@ void main() {
       );
     });
   });
+  group('countHistoryItems', () {
+    test('counts per origin while honoring the search query', () {
+      expect(countHistoryItems(items, originFilter: 'all', searchQuery: ''), 3);
+      expect(
+        countHistoryItems(items, originFilter: 'scanned', searchQuery: ''),
+        2,
+      );
+      expect(
+        countHistoryItems(items, originFilter: 'generated', searchQuery: ''),
+        1,
+      );
+      expect(
+        countHistoryItems(items, originFilter: 'all', searchQuery: 'BRAVO'),
+        1,
+      );
+      expect(
+        countHistoryItems(
+          items,
+          originFilter: 'generated',
+          searchQuery: 'bravo',
+        ),
+        0,
+      );
+    });
+
+    test('matches filterHistoryItems for every origin and query', () {
+      for (final origin in <String>['all', 'scanned', 'generated']) {
+        for (final query in <String>['', 'a', '.bin', 'zeta', 'nope']) {
+          expect(
+            countHistoryItems(items, originFilter: origin, searchQuery: query),
+            filterHistoryItems(
+              items,
+              originFilter: origin,
+              searchQuery: query,
+              sortBy: HistorySortOption.dateDesc,
+            ).length,
+            reason: '$origin / "$query"',
+          );
+        }
+      }
+    });
+  });
 }

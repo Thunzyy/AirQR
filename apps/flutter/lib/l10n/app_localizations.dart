@@ -2951,6 +2951,60 @@ abstract class AppLocalizations {
   /// **'Failed to delete on server.'**
   String get history_serverDeleteFailed;
 
+  /// No description provided for @history_selectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String history_selectedCount(int count);
+
+  /// No description provided for @history_selectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get history_selectAll;
+
+  /// No description provided for @history_deselectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect all'**
+  String get history_deselectAll;
+
+  /// No description provided for @history_exitSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit selection'**
+  String get history_exitSelection;
+
+  /// No description provided for @history_bulkDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one {Delete {count} item?} other {Delete {count} items?}}'**
+  String history_bulkDeleteTitle(int count);
+
+  /// No description provided for @history_bulkDeleteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected files and incomplete scans will be permanently deleted.'**
+  String get history_bulkDeleteMessage;
+
+  /// No description provided for @history_bulkDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one {{count} item deleted} other {{count} items deleted}}'**
+  String history_bulkDeleted(int count);
+
+  /// No description provided for @history_bulkSyncQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one {{count} item queued for sync} other {{count} items queued for sync}}'**
+  String history_bulkSyncQueued(int count);
+
+  /// No description provided for @history_bulkKeptLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one {{count} item now stored locally only} other {{count} items now stored locally only}}'**
+  String history_bulkKeptLocal(int count);
+
   /// No description provided for @scanner_cameraListFailed.
   ///
   /// In en, this message translates to:

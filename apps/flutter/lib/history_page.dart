@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'airqr_theme.dart';
 import 'file_export.dart';
+import 'history_bulk_export.dart';
 import 'l10n/app_localizations.dart';
 import 'history_item.dart';
 import 'generated_history_viewer.dart';
@@ -26,6 +27,7 @@ class HistoryPage extends StatefulWidget {
   final HistoryPageRefreshController? refreshController;
   final Duration refreshInterval;
   final Future<void> Function(String path)? fileSaver;
+  final HistoryPageActions? actions;
 
   const HistoryPage({
     super.key,
@@ -34,6 +36,7 @@ class HistoryPage extends StatefulWidget {
     this.refreshController,
     this.refreshInterval = const Duration(seconds: 5),
     this.fileSaver,
+    this.actions,
   });
 
   @override
@@ -87,7 +90,8 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     seconds: 10,
   ); // Don't sync more often than this
   late final HistoryPageRefreshController _refreshController;
-  final HistoryPageActions _actions = HistoryPageActions();
+  late final HistoryPageActions _actions =
+      widget.actions ?? HistoryPageActions();
   StreamSubscription<SyncEvent>? _wsSubscription;
   bool _refreshInFlight = false;
   bool _refreshRequested = false;
@@ -95,6 +99,9 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   Completer<void>? _queuedRefreshCompleter;
   int _activationRevision = 0;
   bool _appIsResumed = true;
+  bool _selectionMode = false;
+  final Set<String> _selectedItemPaths = <String>{};
+  final Set<String> _selectedScanIds = <String>{};
 
   @override
   void initState() {
@@ -241,6 +248,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
         _items = snapshot.items;
         _incompleteScans = snapshot.incompleteScans;
         _syncEnabled = snapshot.syncEnabled;
+        _pruneSelection();
       });
     } finally {
       _refreshInFlight = false;
@@ -306,6 +314,10 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
 
   List<IncompleteScan> get _filteredIncompleteScans {
     if (_filter == 'generated') return const <IncompleteScan>[];
+    return _incompleteScansMatchingSearch;
+  }
+
+  List<IncompleteScan> get _incompleteScansMatchingSearch {
     final query = _searchQuery.trim().toLowerCase();
     if (query.isEmpty) return _incompleteScans;
     return _incompleteScans.where((scan) {
@@ -322,8 +334,272 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     }).toList();
   }
 
-  Map<String, List<HistoryItem>> get _groupedItems {
-    return groupHistoryItems(_filteredItems);
+  /// What each filter tab would show for the current search. Incomplete
+  /// scans are listed under 'all' and 'scanned', never 'generated'.
+  Map<String, int> get _filterCounts {
+    final incomplete = _incompleteScansMatchingSearch.length;
+    int items(String filter) => countHistoryItems(
+      _items,
+      originFilter: filter,
+      searchQuery: _searchQuery,
+    );
+    return <String, int>{
+      'all': items('all') + incomplete,
+      'scanned': items('scanned') + incomplete,
+      'generated': items('generated'),
+    };
+  }
+
+  // ---- Selection mode -----------------------------------------------------
+
+  /// Only visible entries count, so actions never reach hidden ones.
+  int get _selectedCount => _selectedItems.length + _selectedScans.length;
+
+  /// Selected completed items, in display order.
+  List<HistoryItem> get _selectedItems => _filteredItems
+      .where((item) => _selectedItemPaths.contains(item.path))
+      .toList();
+
+  /// Selected incomplete scans, in display order.
+  List<IncompleteScan> get _selectedScans => _filteredIncompleteScans
+      .where((scan) => _selectedScanIds.contains(scan.id))
+      .toList();
+
+  bool _allVisibleSelected(
+    List<HistoryItem> visibleItems,
+    List<IncompleteScan> visibleScans,
+  ) {
+    if (visibleItems.isEmpty && visibleScans.isEmpty) return false;
+    return visibleItems.every(
+          (item) => _selectedItemPaths.contains(item.path),
+        ) &&
+        visibleScans.every((scan) => _selectedScanIds.contains(scan.id));
+  }
+
+  void _pruneSelection() {
+    _selectedItemPaths.retainAll(_items.map((item) => item.path));
+    _selectedScanIds.retainAll(_incompleteScans.map((scan) => scan.id));
+  }
+
+  void _enterSelectionMode({String? itemPath, String? scanId}) {
+    setState(() {
+      _selectionMode = true;
+      if (itemPath != null) _selectedItemPaths.add(itemPath);
+      if (scanId != null) _selectedScanIds.add(scanId);
+    });
+  }
+
+  void _clearSelectionState() {
+    _selectionMode = false;
+    _selectedItemPaths.clear();
+    _selectedScanIds.clear();
+  }
+
+  void _exitSelectionMode() {
+    if (!mounted) return;
+    setState(_clearSelectionState);
+  }
+
+  void _toggleItemSelection(String path) {
+    setState(() {
+      if (!_selectedItemPaths.remove(path)) _selectedItemPaths.add(path);
+    });
+  }
+
+  void _toggleScanSelection(String scanId) {
+    setState(() {
+      if (!_selectedScanIds.remove(scanId)) _selectedScanIds.add(scanId);
+    });
+  }
+
+  void _toggleSelectAll(
+    List<HistoryItem> visibleItems,
+    List<IncompleteScan> visibleScans,
+  ) {
+    final selectAll = !_allVisibleSelected(visibleItems, visibleScans);
+    setState(() {
+      if (selectAll) {
+        _selectedItemPaths.addAll(visibleItems.map((item) => item.path));
+        _selectedScanIds.addAll(visibleScans.map((scan) => scan.id));
+      } else {
+        _selectedItemPaths.clear();
+        _selectedScanIds.clear();
+      }
+    });
+  }
+
+  Future<void> _confirmBulkDelete() async {
+    final count = _selectedCount;
+    if (count == 0) return;
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AirQrTheme.card(context),
+        title: Text(
+          l10n.history_bulkDeleteTitle(count),
+          style: TextStyle(color: AirQrTheme.textPrimary(context)),
+        ),
+        content: Text(
+          l10n.history_bulkDeleteMessage,
+          style: TextStyle(color: AirQrTheme.textSecondary(context)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              l10n.common_cancel,
+              style: TextStyle(color: AirQrTheme.textSecondary(context)),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              l10n.common_delete,
+              style: TextStyle(color: AirQrTheme.dangerText(context)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await _bulkDelete();
+    }
+  }
+
+  Future<void> _bulkDelete() async {
+    final paths = _selectedItems.map((item) => item.path).toList();
+    final scanIds = _selectedScans.map((scan) => scan.id).toList();
+    _exitSelectionMode();
+
+    var serverDeleteFailed = false;
+    for (final path in paths) {
+      serverDeleteFailed = await _removeHistoryItem(path) || serverDeleteFailed;
+    }
+    for (final scanId in scanIds) {
+      serverDeleteFailed =
+          await _removeIncompleteScan(scanId) || serverDeleteFailed;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          AppLocalizations.of(
+            context,
+          )!.history_bulkDeleted(paths.length + scanIds.length),
+        ),
+      ),
+    );
+    if (serverDeleteFailed) _showServerDeleteFailedSnackBar();
+  }
+
+  Future<void> _bulkDownload() async {
+    final items = _selectedItems;
+    if (items.isEmpty) return;
+    _exitSelectionMode();
+    if (items.length == 1) {
+      await _saveHistoryItemOnDemand(items.single);
+      return;
+    }
+
+    final localPaths = <String>[];
+    for (final item in items) {
+      final localItem = await _materializeForAction(item);
+      if (!mounted) return;
+      if (localItem != null) localPaths.add(localItem.path);
+    }
+    if (localPaths.isEmpty) return;
+
+    Directory? exportDir;
+    try {
+      exportDir = await Directory.systemTemp.createTemp(
+        'airqr-history-export-',
+      );
+      final zip = await buildHistoryBulkZip(
+        filePaths: localPaths,
+        outputDirectory: exportDir,
+        now: DateTime.now(),
+      );
+      if (zip == null || !mounted) return;
+      await (widget.fileSaver ?? _saveFileToDevice)(zip.path);
+    } catch (error) {
+      debugPrint('Bulk download error: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              AppLocalizations.of(
+                context,
+              )!.history_errorSaving(error.toString()),
+            ),
+            backgroundColor: AirQrTheme.destructive,
+          ),
+        );
+      }
+    } finally {
+      try {
+        await exportDir?.delete(recursive: true);
+      } catch (error) {
+        debugPrint('Bulk download cleanup error: $error');
+      }
+    }
+  }
+
+  Future<void> _bulkSync() async {
+    final targets = _selectedItems.where((item) => item.isLocalOnly).toList();
+    if (targets.isEmpty) return;
+    _exitSelectionMode();
+
+    var queued = 0;
+    HistorySyncItemResult? firstProblem;
+    for (final item in targets) {
+      final result = await _actions.syncItem(item);
+      if (result.status == HistorySyncItemStatus.queued) {
+        queued++;
+      } else {
+        firstProblem ??= result;
+      }
+    }
+    if (!mounted) return;
+    if (queued > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.history_bulkSyncQueued(queued),
+          ),
+          backgroundColor: AirQrTheme.success,
+        ),
+      );
+    }
+    if (firstProblem != null) await _showSyncItemResult(firstProblem);
+    await _refresh();
+  }
+
+  Future<void> _bulkKeepLocal() async {
+    final targets = _selectedItems
+        .where((item) => item.isSynced && !item.isLocalOnly)
+        .toList();
+    if (targets.isEmpty) return;
+    _exitSelectionMode();
+
+    var kept = 0;
+    for (final item in targets) {
+      final localItem = await _materializeForAction(item);
+      if (!mounted) return;
+      if (localItem == null) continue;
+      await _actions.keepLocal(localItem.path);
+      kept++;
+    }
+    await _refresh();
+    if (!mounted || kept == 0) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          AppLocalizations.of(context)!.history_bulkKeptLocal(kept),
+        ),
+        backgroundColor: AirQrTheme.accentBlue,
+      ),
+    );
   }
 
   Future<void> _loadSortPreference() async {
@@ -415,6 +691,14 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   }
 
   Future<void> _deleteFile(String path) async {
+    if (await _removeHistoryItem(path)) {
+      _showServerDeleteFailedSnackBar();
+    }
+  }
+
+  /// Removes [path] from the list and storage; returns true when the server
+  /// copy could not be deleted.
+  Future<bool> _removeHistoryItem(String path) async {
     HistoryItem? deletedItem;
     for (final item in _items) {
       if (item.path == path) {
@@ -427,14 +711,15 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     }
 
     // Immediately remove from state to avoid "Dismissible still in tree" error
-    setState(() {
-      _items.removeWhere((item) => item.path == path);
-    });
+    if (mounted) {
+      setState(() {
+        _items.removeWhere((item) => item.path == path);
+        _selectedItemPaths.remove(path);
+      });
+    }
 
     final result = await _actions.deleteHistoryItem(deletedItem);
-    if (result.shouldShowServerDeleteFailure) {
-      _showServerDeleteFailedSnackBar();
-    }
+    return result.shouldShowServerDeleteFailure;
   }
 
   Future<void> _keepLocal(String path) async {
@@ -697,6 +982,14 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   }
 
   Future<void> _deleteIncompleteScan(String scanId) async {
+    if (await _removeIncompleteScan(scanId)) {
+      _showServerDeleteFailedSnackBar();
+    }
+  }
+
+  /// Removes [scanId] from the list and storage; returns true when the
+  /// server session could not be deleted.
+  Future<bool> _removeIncompleteScan(String scanId) async {
     IncompleteScan? deletedScan;
     for (final scan in _incompleteScans) {
       if (scan.id == scanId) {
@@ -706,17 +999,18 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     }
 
     // Immediately remove from state to avoid "Dismissible still in tree" error
-    setState(() {
-      _incompleteScans.removeWhere((scan) => scan.id == scanId);
-    });
+    if (mounted) {
+      setState(() {
+        _incompleteScans.removeWhere((scan) => scan.id == scanId);
+        _selectedScanIds.remove(scanId);
+      });
+    }
 
     final result = await _actions.deleteIncompleteScan(
       deletedScan,
       syncEnabled: _syncEnabled,
     );
-    if (result.shouldShowServerDeleteFailure) {
-      _showServerDeleteFailedSnackBar();
-    }
+    return result.shouldShowServerDeleteFailure;
   }
 
   void _showServerDeleteFailedSnackBar() {
@@ -945,11 +1239,12 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     const warningColor = AirQrTheme.progressOrange;
     final generatedColor = AirQrTheme.accentText(context);
 
-    final grouped = _groupedItems;
+    final filteredItems = _filteredItems;
+    final grouped = groupHistoryItems(filteredItems);
     final filteredIncompleteScans = _filteredIncompleteScans;
     final sectionKeys = historySectionKeys(grouped, sortBy: _sortBy);
     final hasContent =
-        _filteredItems.isNotEmpty || filteredIncompleteScans.isNotEmpty;
+        filteredItems.isNotEmpty || filteredIncompleteScans.isNotEmpty;
     final hasAnyHistory = _items.isNotEmpty || _incompleteScans.isNotEmpty;
     final presentationEntries = <_HistoryPresentationEntry>[];
     if (filteredIncompleteScans.isNotEmpty) {
@@ -970,153 +1265,210 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     }
     presentationEntries.add(const _HistoryPresentationEntry.gap(100));
 
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            HistorySearchToolbar(
-              searchController: _searchController,
-              searchOpen: _searchOpen,
-              searchQuery: _searchQuery,
-              searchHint: l10n.history_searchFiles,
-              connected: _syncEnabled,
-              connectedLabel: l10n.history_connected,
-              refreshTooltip: l10n.history_refresh,
-              clearSearchTooltip: l10n.history_clearSearch,
-              onToggleSearch: () {
-                setState(() {
-                  _searchOpen = !_searchOpen;
-                  if (!_searchOpen) {
+    final selectedItems = _selectionMode
+        ? _selectedItems
+        : const <HistoryItem>[];
+    final selectionBar = HistorySelectionBar(
+      selectedLabel: l10n.history_selectedCount(_selectedCount),
+      allSelected: _allVisibleSelected(filteredItems, filteredIncompleteScans),
+      selectAllLabel: l10n.history_selectAll,
+      deselectAllLabel: l10n.history_deselectAll,
+      closeTooltip: l10n.history_exitSelection,
+      onClose: _exitSelectionMode,
+      onToggleSelectAll: hasContent
+          ? () => _toggleSelectAll(filteredItems, filteredIncompleteScans)
+          : null,
+      deleteTooltip: l10n.common_delete,
+      onDelete: _selectedCount > 0 ? _confirmBulkDelete : null,
+      showDownload: _selectedCount == 0 || selectedItems.isNotEmpty,
+      downloadTooltip: l10n.common_download,
+      onDownload: selectedItems.isNotEmpty ? _bulkDownload : null,
+      syncTooltip: l10n.history_syncToServer,
+      onSync: selectedItems.any((item) => item.isLocalOnly) ? _bulkSync : null,
+      keepLocalTooltip: l10n.history_keepLocal,
+      onKeepLocal:
+          selectedItems.any((item) => item.isSynced && !item.isLocalOnly)
+          ? _bulkKeepLocal
+          : null,
+    );
+
+    return PopScope(
+      canPop: !_selectionMode,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _exitSelectionMode();
+      },
+      child: Scaffold(
+        backgroundColor: backgroundColor,
+        body: SafeArea(
+          child: Column(
+            children: [
+              if (_selectionMode)
+                selectionBar
+              else
+                HistorySearchToolbar(
+                  searchController: _searchController,
+                  searchOpen: _searchOpen,
+                  searchQuery: _searchQuery,
+                  searchHint: l10n.history_searchFiles,
+                  connected: _syncEnabled,
+                  connectedLabel: l10n.history_connected,
+                  refreshTooltip: l10n.history_refresh,
+                  clearSearchTooltip: l10n.history_clearSearch,
+                  onToggleSearch: () {
+                    setState(() {
+                      _searchOpen = !_searchOpen;
+                      if (!_searchOpen) {
+                        _searchController.clear();
+                        _searchQuery = '';
+                      }
+                    });
+                  },
+                  onClearSearch: () {
                     _searchController.clear();
-                    _searchQuery = '';
-                  }
-                });
-              },
-              onClearSearch: () {
-                _searchController.clear();
-                setState(() => _searchQuery = '');
-              },
-              onSearchChanged: (value) => setState(() => _searchQuery = value),
-              sortTooltip: _sortTooltip(l10n),
-              sortItems: _buildSortMenuItems(l10n),
-              onSortSelected: (menuValue) =>
-                  _onSortSelected(menuValue.value as HistorySortOption),
-              onRefresh: _refresh,
-              canClearHistory: hasAnyHistory,
-              clearHistoryTooltip: _clearHistoryTooltip(l10n),
-              onClearHistory: _confirmClearHistory,
-              syncEnabled: _syncEnabled,
-              isSyncingNow: _isSyncingNow,
-              syncTooltip: l10n.history_syncToServer,
-              onSyncNow: _syncNowFromSearchbar,
-              cardColor: cardColor,
-              primaryColor: primaryColor,
-            ),
-            HistoryFilterToggle(
-              selectedFilter: _filter,
-              cardColor: AirQrTheme.navSurface(context),
-              selectedColor: AirQrTheme.navActive(context),
-              allLabel: l10n.history_all,
-              scannedLabel: l10n.history_scanned,
-              generatedLabel: l10n.history_generated,
-              onChanged: (value) => setState(() => _filter = value),
-            ),
-            Expanded(
-              child: !hasContent
-                  ? HistoryEmptyState(
-                      filter: _filter,
-                      scannedLabel: l10n.history_noFilesScanned,
-                      generatedLabel: l10n.history_noFilesGenerated,
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: presentationEntries.length,
-                      itemBuilder: (context, index) {
-                        final entry = presentationEntries[index];
-                        switch (entry.kind) {
-                          case _HistoryPresentationEntryKind.header:
-                            return HistorySectionHeader(
-                              title: entry.sectionKey == '__incomplete__'
-                                  ? l10n.history_incompleteScans
-                                  : _historySectionTitle(
-                                      l10n,
-                                      entry.sectionKey!,
+                    setState(() => _searchQuery = '');
+                  },
+                  onSearchChanged: (value) =>
+                      setState(() => _searchQuery = value),
+                  sortTooltip: _sortTooltip(l10n),
+                  sortItems: _buildSortMenuItems(l10n),
+                  onSortSelected: (menuValue) =>
+                      _onSortSelected(menuValue.value as HistorySortOption),
+                  onRefresh: _refresh,
+                  canClearHistory: hasAnyHistory,
+                  clearHistoryTooltip: _clearHistoryTooltip(l10n),
+                  onClearHistory: _confirmClearHistory,
+                  syncEnabled: _syncEnabled,
+                  isSyncingNow: _isSyncingNow,
+                  syncTooltip: l10n.history_syncToServer,
+                  onSyncNow: _syncNowFromSearchbar,
+                  selectTooltip: l10n.history_select,
+                  onEnterSelection: hasContent ? _enterSelectionMode : null,
+                  cardColor: cardColor,
+                  primaryColor: primaryColor,
+                ),
+              HistoryFilterToggle(
+                selectedFilter: _filter,
+                cardColor: AirQrTheme.navSurface(context),
+                selectedColor: AirQrTheme.navActive(context),
+                allLabel: l10n.history_all,
+                scannedLabel: l10n.history_scanned,
+                generatedLabel: l10n.history_generated,
+                counts: _filterCounts,
+                onChanged: (value) => setState(() {
+                  if (value != _filter) _clearSelectionState();
+                  _filter = value;
+                }),
+              ),
+              Expanded(
+                child: !hasContent
+                    ? HistoryEmptyState(
+                        filter: _filter,
+                        scannedLabel: l10n.history_noFilesScanned,
+                        generatedLabel: l10n.history_noFilesGenerated,
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: presentationEntries.length,
+                        itemBuilder: (context, index) {
+                          final entry = presentationEntries[index];
+                          switch (entry.kind) {
+                            case _HistoryPresentationEntryKind.header:
+                              return HistorySectionHeader(
+                                title: entry.sectionKey == '__incomplete__'
+                                    ? l10n.history_incompleteScans
+                                    : _historySectionTitle(
+                                        l10n,
+                                        entry.sectionKey!,
+                                      ),
+                              );
+                            case _HistoryPresentationEntryKind.gap:
+                              return SizedBox(height: entry.gap!);
+                            case _HistoryPresentationEntryKind.incomplete:
+                              final scan = entry.scan!;
+                              return IncompleteHistoryCard(
+                                scan: scan,
+                                cardColor: cardColor,
+                                warningColor: warningColor,
+                                displayName: resolveScanDisplayName(
+                                  scan.filename,
+                                  scan.id,
+                                ),
+                                packetsSummary: AppLocalizations.of(context)!
+                                    .history_packets(
+                                      scan.receivedPackets,
+                                      scan.expectedPackets,
                                     ),
-                            );
-                          case _HistoryPresentationEntryKind.gap:
-                            return SizedBox(height: entry.gap!);
-                          case _HistoryPresentationEntryKind.incomplete:
-                            final scan = entry.scan!;
-                            return IncompleteHistoryCard(
-                              scan: scan,
-                              cardColor: cardColor,
-                              warningColor: warningColor,
-                              displayName: resolveScanDisplayName(
-                                scan.filename,
-                                scan.id,
-                              ),
-                              packetsSummary: AppLocalizations.of(context)!
-                                  .history_packets(
-                                    scan.receivedPackets,
-                                    scan.expectedPackets,
-                                  ),
-                              serverSyncSummary: _serverSyncSummary(
-                                context,
-                                scan,
-                              ),
-                              formattedDate: _formatDate(
-                                scan.lastUpdateTimestamp,
-                              ),
-                              keepLocalLabel: l10n.history_keepLocal,
-                              syncLabel: l10n.history_syncToServer,
-                              resumeLabel: l10n.history_resumeScan,
-                              deleteLabel: l10n.history_deleteIncomplete,
-                              onSync: _syncEnabled && !scan.isRemote
-                                  ? () => _syncIncompleteScan(scan)
-                                  : null,
-                              onKeepLocal: _syncEnabled && scan.isRemote
-                                  ? () => _keepLocalIncompleteScan(scan)
-                                  : null,
-                              onResume: () => _resumeScan(scan),
-                              onDelete: () => _deleteIncompleteScan(scan.id),
-                            );
-                          case _HistoryPresentationEntryKind.completed:
-                            final item = entry.item!;
-                            return CompletedHistoryCard(
-                              item: item,
-                              cardColor: cardColor,
-                              successColor: _filter == 'scanned'
-                                  ? successColor
-                                  : generatedColor,
-                              subtitle:
-                                  '${_formatDate(item.timestamp)} • ${_formatSize(item.size)}',
-                              viewLabel: l10n.common_open,
-                              keepLocalLabel: l10n.history_keepLocal,
-                              syncLabel: l10n.history_syncToServer,
-                              saveLabel: l10n.common_download,
-                              deleteLabel: l10n.common_delete,
-                              onView: item.isPreviewable
-                                  ? () => _viewHistoryItemOnDemand(item)
-                                  : null,
-                              onKeepLocal: item.isSynced
-                                  ? () => _keepLocalOnDemand(item)
-                                  : null,
-                              onSync: item.isLocalOnly
-                                  ? () => _syncItem(item)
-                                  : null,
-                              onSave: () => _saveHistoryItemOnDemand(item),
-                              onDelete: () => _confirmDelete(
-                                item.path,
-                                p.basename(item.path),
-                              ),
-                              onDismissed: () => _deleteFile(item.path),
-                            );
-                        }
-                      },
-                    ),
-            ),
-          ],
+                                serverSyncSummary: _serverSyncSummary(
+                                  context,
+                                  scan,
+                                ),
+                                formattedDate: _formatDate(
+                                  scan.lastUpdateTimestamp,
+                                ),
+                                keepLocalLabel: l10n.history_keepLocal,
+                                syncLabel: l10n.history_syncToServer,
+                                resumeLabel: l10n.history_resumeScan,
+                                deleteLabel: l10n.history_deleteIncomplete,
+                                onSync: _syncEnabled && !scan.isRemote
+                                    ? () => _syncIncompleteScan(scan)
+                                    : null,
+                                onKeepLocal: _syncEnabled && scan.isRemote
+                                    ? () => _keepLocalIncompleteScan(scan)
+                                    : null,
+                                onResume: () => _resumeScan(scan),
+                                onDelete: () => _deleteIncompleteScan(scan.id),
+                                selectionMode: _selectionMode,
+                                selected: _selectedScanIds.contains(scan.id),
+                                onToggleSelected: () =>
+                                    _toggleScanSelection(scan.id),
+                                onLongPress: () =>
+                                    _enterSelectionMode(scanId: scan.id),
+                              );
+                            case _HistoryPresentationEntryKind.completed:
+                              final item = entry.item!;
+                              return CompletedHistoryCard(
+                                item: item,
+                                cardColor: cardColor,
+                                successColor: _filter == 'scanned'
+                                    ? successColor
+                                    : generatedColor,
+                                subtitle:
+                                    '${_formatDate(item.timestamp)} • ${_formatSize(item.size)}',
+                                viewLabel: l10n.common_open,
+                                keepLocalLabel: l10n.history_keepLocal,
+                                syncLabel: l10n.history_syncToServer,
+                                saveLabel: l10n.common_download,
+                                deleteLabel: l10n.common_delete,
+                                onView: item.isPreviewable
+                                    ? () => _viewHistoryItemOnDemand(item)
+                                    : null,
+                                onKeepLocal: item.isSynced
+                                    ? () => _keepLocalOnDemand(item)
+                                    : null,
+                                onSync: item.isLocalOnly
+                                    ? () => _syncItem(item)
+                                    : null,
+                                onSave: () => _saveHistoryItemOnDemand(item),
+                                onDelete: () => _confirmDelete(
+                                  item.path,
+                                  p.basename(item.path),
+                                ),
+                                onDismissed: () => _deleteFile(item.path),
+                                selectionMode: _selectionMode,
+                                selected: _selectedItemPaths.contains(
+                                  item.path,
+                                ),
+                                onToggleSelected: () =>
+                                    _toggleItemSelection(item.path),
+                                onLongPress: () =>
+                                    _enterSelectionMode(itemPath: item.path),
+                              );
+                          }
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
