@@ -276,6 +276,7 @@ const en = {
     deleteIncomplete: 'Delete incomplete scan',
     viewGif: 'View GIF',
     previewFile: 'Preview file',
+    previewLoadFailed: 'This file could not be loaded for preview.',
     previewUnavailable: 'Preview unavailable',
     previewUnsupported:
       'This file type cannot be previewed yet. You can still download it.',

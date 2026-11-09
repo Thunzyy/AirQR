@@ -678,6 +678,46 @@ describe("HistoryTab", () => {
     }
   });
 
+  it("tells the user when a history preview cannot be loaded", async () => {
+    const historyItem = {
+      id: "missing-data",
+      origin: "generated" as const,
+      type: "file" as const,
+      title: "clip.gif",
+      subtitle: "2026-03-29 - 22:29 - 256 B",
+      date: "2026-03-29",
+      mimeType: "image/gif",
+      size: 256,
+      source: "local" as const,
+    };
+
+    useHistoryStore.setState({
+      ...useHistoryStore.getState(),
+      items: [historyItem],
+      incompleteItems: [],
+    });
+    getHistoryItemByIdMock.mockResolvedValue(null);
+
+    render(<HistoryTab />);
+
+    await waitFor(() => {
+      expect(getHistoryProps()?.onView).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      await getHistoryProps()?.onView?.(historyItem);
+    });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(useToastStore.getState()).toEqual(
+      expect.objectContaining({
+        visible: true,
+        type: "error",
+        message: "This file could not be loaded for preview.",
+      })
+    );
+  });
+
   it("renders the history preview as a modal dialog and closes it on Escape", async () => {
     const historyItem = {
       id: "history-preview-1",

@@ -276,6 +276,7 @@ const fr = {
     deleteIncomplete: 'Supprimer le scan incomplet',
     viewGif: 'Voir le GIF',
     previewFile: 'Previsualiser le fichier',
+    previewLoadFailed: "Impossible de charger ce fichier pour l'aperçu.",
     previewUnavailable: 'Apercu indisponible',
     previewUnsupported:
       'Ce type de fichier ne peut pas encore etre previsualise. Vous pouvez quand meme le telecharger.',
