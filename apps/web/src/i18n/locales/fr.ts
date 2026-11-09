@@ -276,6 +276,7 @@ const fr = {
     deleteIncomplete: 'Supprimer le scan incomplet',
     viewGif: 'Voir le GIF',
     previewFile: 'Previsualiser le fichier',
+    deletedOnServer: 'Cet élément a été supprimé du serveur.',
     previewLoadFailed: "Impossible de charger ce fichier pour l'aperçu.",
     previewUnavailable: 'Apercu indisponible',
     previewUnsupported:

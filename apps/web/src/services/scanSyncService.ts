@@ -18,6 +18,7 @@ import {
   resolveFetchCredentials,
   resolveServerBaseUrl,
 } from './syncUrl';
+import { ServerFileNotFoundError } from './serverErrors';
 
 interface CanonicalScanStateFields {
   scanState?: ScanSessionState;
@@ -305,6 +306,9 @@ export async function fetchServerFile(
     cache: 'no-store',
   });
 
+  if (response.status === 404) {
+    throw new ServerFileNotFoundError(`File fetch failed: ${response.status}`);
+  }
   if (!response.ok) {
     throw new Error(`File fetch failed: ${response.status}`);
   }
@@ -342,6 +346,9 @@ export async function fetchServerHistoryFile(
     cache: 'no-store',
   });
 
+  if (response.status === 404) {
+    throw new ServerFileNotFoundError(`File fetch failed: ${response.status}`);
+  }
   if (!response.ok) {
     throw new Error(`File fetch failed: ${response.status}`);
   }

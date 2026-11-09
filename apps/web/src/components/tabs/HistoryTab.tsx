@@ -21,6 +21,7 @@ import {
 import { asWireObject, asWireString, type WireValue } from '../../parse/wire';
 import { formatDateCategory, formatSize, formatScanDisplayName } from '../../utils/format';
 import { unzipFilesInWorker, zipFilesInWorker } from '../../utils/zipWorker';
+import { ServerFileNotFoundError } from '../../services/serverErrors';
 import Icon from '../ui/Icon';
 import NoteCodeViewer from '../note/NoteCodeViewer';
 import type {
@@ -133,6 +134,11 @@ function toPositiveInteger(value: WireValue | undefined): number {
   }
   return Math.trunc(parsed);
 }
+
+type HistoryItemDataResult =
+  | { status: 'ok'; item: HistoryItem }
+  | { status: 'missing' }
+  | { status: 'deleted-on-server' };
 
 const HistoryTab: React.FC = () => {
   const { t } = useTranslation();
@@ -1180,11 +1186,31 @@ const HistoryTab: React.FC = () => {
     };
   }, [cleanupPreview, historyPreview]);
 
+  // The server no longer has this entry (deleted elsewhere or by retention):
+  // drop the local copy the same way a live delete event would.
+  const forgetServerDeletedHistoryItem = (item: HistoryItem) => {
+    const origin = item.origin;
+    const remoteId =
+      origin === 'generated'
+        ? item.remoteHistoryId || item.serverId || item.id
+        : item.remoteSessionId || item.serverId || item.id;
+    const tombstoneVersion = recordRemoteHistoryDeletion(serverScope, origin, remoteId);
+    setRemoteItems((prev) =>
+      prev.filter((entry) => !isHistoryItemTombstoned(serverScope, entry))
+    );
+    void removeServerBackedHistoryItems(origin, remoteId).then((purgeSucceeded) => {
+      if (purgeSucceeded) {
+        acknowledgeRemoteHistoryDurablePurge(serverScope, origin, remoteId, tombstoneVersion);
+      }
+    });
+    showToast(t('history.deletedOnServer'), 'warning');
+  };
+
   const resolveHistoryItemData = async (
     item: HistoryItem
-  ): Promise<HistoryItem | null> => {
+  ): Promise<HistoryItemDataResult> => {
     if (item.fileData) {
-      return item;
+      return { status: 'ok', item };
     }
     if (item.source === 'server') {
       try {
@@ -1198,28 +1224,39 @@ const HistoryTab: React.FC = () => {
                 ? item.title
                 : file.filename || item.title;
             return {
-              ...item,
-              title: resolvedTitle,
-              mimeType: file.mimeType || item.mimeType,
-              fileData: file.data,
+              status: 'ok',
+              item: {
+                ...item,
+                title: resolvedTitle,
+                mimeType: file.mimeType || item.mimeType,
+                fileData: file.data,
+              },
             };
           }
           if (item.remoteSessionId) {
             const file = await fetchServerFile(uploadConfig, item.remoteSessionId);
             return {
-              ...item,
-              title: file.filename || item.title,
-              mimeType: file.mimeType || item.mimeType,
-              fileData: file.data,
+              status: 'ok',
+              item: {
+                ...item,
+                title: file.filename || item.title,
+                mimeType: file.mimeType || item.mimeType,
+                fileData: file.data,
+              },
             };
           }
       } catch (error) {
+        if (error instanceof ServerFileNotFoundError) {
+          logger.warn('History item no longer exists on the server', { itemId: item.id });
+          forgetServerDeletedHistoryItem(item);
+          return { status: 'deleted-on-server' };
+        }
         logger.error('Failed to fetch server file', { error: error instanceof Error ? error.message : String(error) });
-        return null;
+        return { status: 'missing' };
       }
     }
     const stored = await getHistoryItemById(item.id);
-    return stored ? normalizeHistoryItem(stored) : null;
+    return stored ? { status: 'ok', item: normalizeHistoryItem(stored) } : { status: 'missing' };
   };
 
   const triggerBlobDownload = (blob: Blob, filename: string) => {
@@ -1235,7 +1272,8 @@ const HistoryTab: React.FC = () => {
   };
 
   const handleDownload = async (item: HistoryItem) => {
-    const resolved = await resolveHistoryItemData(item);
+    const result = await resolveHistoryItemData(item);
+    const resolved = result.status === 'ok' ? result.item : null;
     if (!resolved?.fileData) {
       logger.debug('History item data not found', { itemId: item.id });
       return;
@@ -1253,7 +1291,8 @@ const HistoryTab: React.FC = () => {
     const sources: BulkDownloadArchiveSource[] = [];
     let failedCount = 0;
     for (const item of items) {
-      const resolved = await resolveHistoryItemData(item);
+      const result = await resolveHistoryItemData(item);
+      const resolved = result.status === 'ok' ? result.item : null;
       if (!resolved?.fileData) {
         failedCount++;
         continue;
@@ -2091,7 +2130,12 @@ const HistoryTab: React.FC = () => {
   }, [clearHistoryState, showToast, t]);
 
   const handleView = async (item: HistoryItem) => {
-    const resolved = await resolveHistoryItemData(item);
+    const result = await resolveHistoryItemData(item);
+    if (result.status === 'deleted-on-server') {
+      // Already removed locally, with its own message.
+      return;
+    }
+    const resolved = result.status === 'ok' ? result.item : null;
     if (!resolved?.fileData) {
       logger.warn('History item data not found for preview', {
         itemId: item.id,
