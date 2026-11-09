@@ -22,6 +22,10 @@ class HistoryFilterToggle extends StatelessWidget {
   final String allLabel;
   final String scannedLabel;
   final String generatedLabel;
+
+  /// Optional per-filter item counts keyed by 'all' / 'scanned' /
+  /// 'generated'; a missing key renders no badge for that tab.
+  final Map<String, int>? counts;
   final ValueChanged<String> onChanged;
 
   const HistoryFilterToggle({
@@ -32,6 +36,7 @@ class HistoryFilterToggle extends StatelessWidget {
     required this.allLabel,
     required this.scannedLabel,
     required this.generatedLabel,
+    this.counts,
     required this.onChanged,
   });
 
@@ -41,29 +46,34 @@ class HistoryFilterToggle extends StatelessWidget {
     final labels = [allLabel, scannedLabel, generatedLabel];
     final activeIndex = filters.indexOf(selectedFilter).clamp(0, 2);
     final scaledLabelHeight = MediaQuery.textScalerOf(context).scale(16);
-    final toggleHeight = scaledLabelHeight > 22
-        ? 8 + (scaledLabelHeight * 1.2 * 2)
-        : 44.0;
-    final indicatorHeight = toggleHeight - 8;
+    // Flat segmented track (mirrors web): 48dp tall, 1dp control border,
+    // 4dp padding, so the thumb is 48 - 2 - 8 = 38dp.
+    const toggleHeight = 48.0;
+    const indicatorHeight = toggleHeight - 2 - 8;
+    final trackDecoration = BoxDecoration(
+      color: cardColor,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AirQrTheme.controlBorder(context)),
+    );
 
     if (scaledLabelHeight > 22) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Container(
           padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(22),
-          ),
+          decoration: trackDecoration,
           child: Column(
             children: [
               for (var index = 0; index < filters.length; index++)
                 ConstrainedBox(
                   constraints: const BoxConstraints(minHeight: 48),
                   child: _HistoryFilterToggleOption(
+                    filter: filters[index],
                     label: labels[index],
+                    count: counts?[filters[index]],
                     isSelected: selectedFilter == filters[index],
                     selectedBackground: selectedColor,
+                    maxLabelLines: 2,
                     onTap: () => onChanged(filters[index]),
                   ),
                 ),
@@ -78,10 +88,7 @@ class HistoryFilterToggle extends StatelessWidget {
       child: SizedBox(
         height: toggleHeight,
         child: Container(
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(22),
-          ),
+          decoration: trackDecoration,
           padding: const EdgeInsets.all(4),
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -101,12 +108,12 @@ class HistoryFilterToggle extends StatelessWidget {
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: selectedColor,
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.18),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
+                            color: Colors.black.withValues(alpha: 0.14),
+                            blurRadius: 2,
+                            offset: const Offset(0, 1),
                           ),
                         ],
                       ),
@@ -117,7 +124,9 @@ class HistoryFilterToggle extends StatelessWidget {
                       for (var index = 0; index < filters.length; index++)
                         Expanded(
                           child: _HistoryFilterToggleOption(
+                            filter: filters[index],
                             label: labels[index],
+                            count: counts?[filters[index]],
                             isSelected: selectedFilter == filters[index],
                             onTap: () => onChanged(filters[index]),
                           ),
@@ -134,52 +143,95 @@ class HistoryFilterToggle extends StatelessWidget {
   }
 }
 
+String _formatHistoryCount(int count) => count > 999 ? '999+' : '$count';
+
 class _HistoryFilterToggleOption extends StatelessWidget {
+  final String filter;
   final String label;
+  final int? count;
   final bool isSelected;
   final VoidCallback onTap;
   final Color? selectedBackground;
+  final int maxLabelLines;
 
   const _HistoryFilterToggleOption({
+    required this.filter,
     required this.label,
+    required this.count,
     required this.isSelected,
     required this.onTap,
     this.selectedBackground,
+    this.maxLabelLines = 1,
   });
 
   @override
   Widget build(BuildContext context) {
+    final labelText = Text(
+      label,
+      maxLines: maxLabelLines,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.center,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+        color: isSelected
+            ? AirQrTheme.textPrimary(context)
+            : AirQrTheme.textMuted(context),
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.15,
+        height: 1.2,
+      ),
+    );
+    final count = this.count;
     return Semantics(
       container: true,
       button: true,
       selected: isSelected,
       label: label,
+      value: count?.toString(),
       child: Material(
         color: isSelected && selectedBackground != null
             ? selectedBackground
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(12),
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(12),
           hoverColor: Colors.transparent,
           highlightColor: Colors.transparent,
           splashColor: Colors.transparent,
           overlayColor: WidgetStateProperty.all(Colors.transparent),
           splashFactory: NoSplash.splashFactory,
           onTap: onTap,
-          child: Center(
-            child: ExcludeSemantics(
-              child: Text(
-                label,
-                maxLines: 2,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: isSelected
-                      ? AirQrTheme.textPrimary(context)
-                      : AirQrTheme.textSecondary(context),
-                  fontWeight: FontWeight.w800,
-                  height: 1.2,
-                ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Center(
+              child: ExcludeSemantics(
+                child: count == null
+                    ? labelText
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Flexible(child: labelText),
+                          const SizedBox(width: 6),
+                          Text(
+                            _formatHistoryCount(count),
+                            key: ValueKey('history_filter_count_$filter'),
+                            maxLines: 1,
+                            softWrap: false,
+                            style: AirQrTypography.of(context).numeric.copyWith(
+                              color: isSelected
+                                  ? AirQrTheme.textSecondary(context)
+                                  : AirQrTheme.textMuted(context),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
               ),
             ),
           ),
@@ -212,6 +264,10 @@ class HistorySearchToolbar extends StatelessWidget {
   final bool isSyncingNow;
   final String syncTooltip;
   final VoidCallback onSyncNow;
+  final String selectTooltip;
+
+  /// Enters multi-select mode; the action is hidden when null.
+  final VoidCallback? onEnterSelection;
   final Color cardColor;
   final Color primaryColor;
 
@@ -239,6 +295,8 @@ class HistorySearchToolbar extends StatelessWidget {
     required this.isSyncingNow,
     required this.syncTooltip,
     required this.onSyncNow,
+    this.selectTooltip = 'Select',
+    this.onEnterSelection,
     required this.cardColor,
     required this.primaryColor,
   });
@@ -363,6 +421,22 @@ class HistorySearchToolbar extends StatelessWidget {
                       ),
                     ),
                   ],
+                  if (onEnterSelection != null) ...[
+                    const SizedBox(width: 4),
+                    _HistoryToolbarActionBox(
+                      surfaceColor: actionSurface,
+                      hoverColor: actionHover,
+                      child: IconButton(
+                        tooltip: selectTooltip,
+                        onPressed: onEnterSelection,
+                        icon: AirQrIcon(
+                          'check_circle',
+                          color: textSecondary,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: 4),
                   _HistoryToolbarActionBox(
                     surfaceColor: actionSurface,
@@ -382,8 +456,17 @@ class HistorySearchToolbar extends StatelessWidget {
                 ],
               );
 
+              // Search, sort, refresh, clear + optional sync / select; each
+              // box is 36dp with 4dp gaps. The badge can take up to 90dp.
+              final actionCount =
+                  4 +
+                  (syncEnabled ? 1 : 0) +
+                  (onEnterSelection != null ? 1 : 0);
+              final actionsWidth = actionCount * 36.0 + (actionCount - 1) * 4;
               final useStackedToolbar =
-                  constraints.maxWidth < 290 || scaledBadgeFont > 14;
+                  constraints.maxWidth < 290 ||
+                  constraints.maxWidth < actionsWidth + 98 ||
+                  scaledBadgeFont > 14;
               if (connected && useStackedToolbar) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -447,6 +530,191 @@ class HistorySearchToolbar extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Replaces [HistorySearchToolbar] while History is in multi-select mode.
+class HistorySelectionBar extends StatelessWidget {
+  final String selectedLabel;
+  final bool allSelected;
+  final String selectAllLabel;
+  final String deselectAllLabel;
+  final String closeTooltip;
+  final VoidCallback onClose;
+  final VoidCallback? onToggleSelectAll;
+  final String deleteTooltip;
+  final VoidCallback? onDelete;
+  final bool showDownload;
+  final String downloadTooltip;
+  final VoidCallback? onDownload;
+  final String syncTooltip;
+
+  /// Hidden when null.
+  final VoidCallback? onSync;
+  final String keepLocalTooltip;
+
+  /// Hidden when null.
+  final VoidCallback? onKeepLocal;
+
+  const HistorySelectionBar({
+    super.key,
+    required this.selectedLabel,
+    required this.allSelected,
+    required this.selectAllLabel,
+    required this.deselectAllLabel,
+    required this.closeTooltip,
+    required this.onClose,
+    required this.onToggleSelectAll,
+    required this.deleteTooltip,
+    required this.onDelete,
+    required this.showDownload,
+    required this.downloadTooltip,
+    required this.onDownload,
+    required this.syncTooltip,
+    this.onSync,
+    required this.keepLocalTooltip,
+    this.onKeepLocal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textPrimary = AirQrTheme.textPrimary(context);
+    final textSecondary = AirQrTheme.textSecondary(context);
+    final actionSurface = AirQrTheme.actionSurface(context);
+    final actionHover = AirQrTheme.actionHover(context);
+    final disabledColor = AirQrTheme.textMuted(context).withValues(alpha: 0.42);
+
+    Widget actionBox({
+      required String tooltip,
+      required String iconName,
+      required VoidCallback? onPressed,
+      required Color color,
+    }) {
+      return _HistoryToolbarActionBox(
+        surfaceColor: actionSurface,
+        hoverColor: actionHover,
+        child: IconButton(
+          tooltip: tooltip,
+          onPressed: onPressed,
+          icon: AirQrIcon(
+            iconName,
+            color: onPressed == null ? disabledColor : color,
+            size: 18,
+          ),
+        ),
+      );
+    }
+
+    final actionButtons = <Widget>[
+      actionBox(
+        tooltip: deleteTooltip,
+        iconName: 'delete',
+        onPressed: onDelete,
+        color: AirQrTheme.dangerText(context),
+      ),
+      if (showDownload)
+        actionBox(
+          tooltip: downloadTooltip,
+          iconName: 'download',
+          onPressed: onDownload,
+          color: textSecondary,
+        ),
+      if (onSync != null)
+        actionBox(
+          tooltip: syncTooltip,
+          iconName: 'cloud_upload',
+          onPressed: onSync,
+          color: textSecondary,
+        ),
+      if (onKeepLocal != null)
+        actionBox(
+          tooltip: keepLocalTooltip,
+          iconName: 'cloud_off',
+          onPressed: onKeepLocal,
+          color: AirQrTheme.warningText(context),
+        ),
+    ];
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var index = 0; index < actionButtons.length; index++) ...[
+          if (index > 0) const SizedBox(width: 4),
+          actionButtons[index],
+        ],
+      ],
+    );
+    final actionsWidth =
+        actionButtons.length * 36.0 + (actionButtons.length - 1) * 4;
+
+    final close = actionBox(
+      tooltip: closeTooltip,
+      iconName: 'close',
+      onPressed: onClose,
+      color: textSecondary,
+    );
+    final count = Text(
+      selectedLabel,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+        color: textPrimary,
+        fontWeight: FontWeight.w800,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    );
+    final selectAll = TextButton(
+      onPressed: onToggleSelectAll,
+      style: TextButton.styleFrom(
+        foregroundColor: AirQrTheme.accentText(context),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        minimumSize: const Size(48, 36),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(
+        allSelected ? deselectAllLabel : selectAllLabel,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w800),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final singleRow =
+              constraints.maxWidth >= actionsWidth + 300 &&
+              MediaQuery.textScalerOf(context).scale(14) <= 20;
+          if (singleRow) {
+            return Row(
+              children: [
+                close,
+                const SizedBox(width: 10),
+                Expanded(child: count),
+                selectAll,
+                const SizedBox(width: 8),
+                actions,
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  close,
+                  const SizedBox(width: 10),
+                  Expanded(child: count),
+                  Flexible(child: selectAll),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Align(alignment: Alignment.centerRight, child: actions),
+            ],
+          );
+        },
       ),
     );
   }
@@ -848,6 +1116,15 @@ class CompletedHistoryCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onDismissed;
 
+  /// In selection mode the card shows a leading checkbox, taps toggle
+  /// [selected] through [onToggleSelected], and swipe / actions are hidden.
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onToggleSelected;
+
+  /// Long press outside selection mode (enters selection mode).
+  final VoidCallback? onLongPress;
+
   const CompletedHistoryCard({
     super.key,
     required this.item,
@@ -865,6 +1142,10 @@ class CompletedHistoryCard extends StatelessWidget {
     required this.onSave,
     required this.onDelete,
     required this.onDismissed,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onToggleSelected,
+    this.onLongPress,
   });
 
   @override
@@ -1003,6 +1284,62 @@ class CompletedHistoryCard extends StatelessWidget {
       ],
     );
 
+    final card = InkWell(
+      excludeFromSemantics: true,
+      canRequestFocus: false,
+      borderRadius: BorderRadius.circular(28),
+      onTap: selectionMode ? onToggleSelected : null,
+      onLongPress: selectionMode ? onToggleSelected : onLongPress,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(28),
+        ),
+        foregroundDecoration: _historySelectedOutline(
+          selectionMode && selected,
+        ),
+        child: selectionMode
+            ? Row(
+                children: [
+                  HistorySelectionCheckbox(
+                    selected: selected,
+                    semanticLabel: fileName,
+                    onChanged: onToggleSelected,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(child: identity),
+                ],
+              )
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final useStackedLayout =
+                      constraints.maxWidth < 260 ||
+                      MediaQuery.textScalerOf(context).scale(15) > 22;
+                  if (useStackedLayout) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        identity,
+                        const SizedBox(height: 8),
+                        Align(alignment: Alignment.centerRight, child: actions),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: identity),
+                      const SizedBox(width: 4),
+                      actions,
+                    ],
+                  );
+                },
+              ),
+      ),
+    );
+
+    if (selectionMode) return card;
     return Dismissible(
       key: ValueKey('file_${item.path}_${item.timestamp}'),
       background: Container(
@@ -1017,37 +1354,45 @@ class CompletedHistoryCard extends StatelessWidget {
       ),
       direction: DismissDirection.endToStart,
       onDismissed: (_) => onDismissed(),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(28),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final useStackedLayout =
-                constraints.maxWidth < 260 ||
-                MediaQuery.textScalerOf(context).scale(15) > 22;
-            if (useStackedLayout) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  identity,
-                  const SizedBox(height: 8),
-                  Align(alignment: Alignment.centerRight, child: actions),
-                ],
-              );
-            }
-            return Row(
-              children: [
-                Expanded(child: identity),
-                const SizedBox(width: 4),
-                actions,
-              ],
-            );
-          },
-        ),
+      child: card,
+    );
+  }
+}
+
+BoxDecoration? _historySelectedOutline(bool selected) => selected
+    ? BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AirQrTheme.accentBlue, width: 2),
+      )
+    : null;
+
+/// Leading checkbox shown on history cards in selection mode.
+class HistorySelectionCheckbox extends StatelessWidget {
+  final bool selected;
+  final String semanticLabel;
+  final VoidCallback? onChanged;
+
+  const HistorySelectionCheckbox({
+    super.key,
+    required this.selected,
+    required this.semanticLabel,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final onChanged = this.onChanged;
+    return Semantics(
+      label: semanticLabel,
+      child: Checkbox(
+        value: selected,
+        onChanged: onChanged == null ? null : (_) => onChanged(),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        activeColor: AirQrTheme.accentBlue,
+        checkColor: Colors.white,
+        side: BorderSide(color: AirQrTheme.textMuted(context), width: 1.5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
     );
   }
@@ -1070,6 +1415,12 @@ class IncompleteHistoryCard extends StatelessWidget {
   final VoidCallback onResume;
   final VoidCallback onDelete;
 
+  /// See [CompletedHistoryCard.selectionMode].
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onToggleSelected;
+  final VoidCallback? onLongPress;
+
   const IncompleteHistoryCard({
     super.key,
     required this.scan,
@@ -1087,148 +1438,150 @@ class IncompleteHistoryCard extends StatelessWidget {
     this.onKeepLocal,
     required this.onResume,
     required this.onDelete,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onToggleSelected,
+    this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Dismissible(
-      key: ValueKey('scan_${scan.id}'),
-      background: Container(
+    final card = InkWell(
+      excludeFromSemantics: true,
+      canRequestFocus: false,
+      borderRadius: BorderRadius.circular(28),
+      onTap: selectionMode ? onToggleSelected : onResume,
+      onLongPress: selectionMode ? onToggleSelected : onLongPress,
+      child: Container(
+        key: ValueKey('history_incomplete_card_${scan.id}'),
         margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AirQrTheme.destructive,
+          color: cardColor,
           borderRadius: BorderRadius.circular(28),
         ),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const AirQrIcon('delete', color: Colors.white),
-      ),
-      direction: DismissDirection.endToStart,
-      onDismissed: (_) => onDelete(),
-      child: InkWell(
-        excludeFromSemantics: true,
-        canRequestFocus: false,
-        borderRadius: BorderRadius.circular(28),
-        onTap: onResume,
-        child: Container(
-          key: ValueKey('history_incomplete_card_${scan.id}'),
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(28),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AirQrTheme.iconSurface(context),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Stack(
-                  children: [
-                    Center(
-                      child: AirQrIcon(
-                        'autorenew',
-                        size: 20,
-                        color: AirQrTheme.textPrimary(context),
-                      ),
-                    ),
-                    if (scan.isRemote)
-                      const Positioned(
-                        right: -2,
-                        bottom: -2,
-                        child: AirQrSyncBadge(),
-                      ),
-                  ],
-                ),
+        foregroundDecoration: _historySelectedOutline(
+          selectionMode && selected,
+        ),
+        child: Row(
+          children: [
+            if (selectionMode) ...[
+              HistorySelectionCheckbox(
+                selected: selected,
+                semanticLabel: displayName,
+                onChanged: onToggleSelected,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
+              const SizedBox(width: 6),
+            ],
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AirQrTheme.iconSurface(context),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Stack(
+                children: [
+                  Center(
+                    child: AirQrIcon(
+                      'autorenew',
+                      size: 20,
+                      color: AirQrTheme.textPrimary(context),
+                    ),
+                  ),
+                  if (scan.isRemote)
+                    const Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: AirQrSyncBadge(),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          displayName,
+                          style: TextStyle(
+                            color: AirQrTheme.textPrimary(context),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (scan.deviceName != null)
+                        Container(
+                          margin: const EdgeInsets.only(left: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AirQrTheme.warningSurface(context),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           child: Text(
-                            displayName,
+                            scan.deviceName!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: AirQrTheme.textPrimary(context),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (scan.deviceName != null)
-                          Container(
-                            margin: const EdgeInsets.only(left: 6),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AirQrTheme.warningSurface(context),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              scan.deviceName!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: AirQrTheme.warningText(context),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        Text(
-                          '${formatIncompleteProgressPercent(scan.progress)}%',
-                          style: AirQrTypography.of(context).liveNumeric
-                              .copyWith(
-                                color: AirQrTheme.warningText(context),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            '• $packetsSummary${serverSyncSummary == null ? '' : ' • $serverSyncSummary'} • $formattedDate',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AirQrTypography.of(context).numeric.copyWith(
-                              color: AirQrTheme.textMuted(context),
-                              fontSize: 12,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AirQrTheme.warningText(context),
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: LinearProgressIndicator(
-                        value: normalizeIncompleteProgress(scan.progress),
-                        backgroundColor: AirQrTheme.warningSurface(context),
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          AirQrTheme.progressOrange,
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Text(
+                        '${formatIncompleteProgressPercent(scan.progress)}%',
+                        style: AirQrTypography.of(context).liveNumeric.copyWith(
+                          color: AirQrTheme.warningText(context),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
                         ),
-                        minHeight: 4,
                       ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '• $packetsSummary${serverSyncSummary == null ? '' : ' • $serverSyncSummary'} • $formattedDate',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AirQrTypography.of(context).numeric.copyWith(
+                            color: AirQrTheme.textMuted(context),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                      value: normalizeIncompleteProgress(scan.progress),
+                      backgroundColor: AirQrTheme.warningSurface(context),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        AirQrTheme.progressOrange,
+                      ),
+                      minHeight: 4,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
+            ),
+            if (!selectionMode) ...[
               const SizedBox(width: 8),
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1275,9 +1628,27 @@ class IncompleteHistoryCard extends StatelessWidget {
                 ],
               ),
             ],
-          ),
+          ],
         ),
       ),
+    );
+
+    if (selectionMode) return card;
+    return Dismissible(
+      key: ValueKey('scan_${scan.id}'),
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: AirQrTheme.destructive,
+          borderRadius: BorderRadius.circular(28),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const AirQrIcon('delete', color: Colors.white),
+      ),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) => onDelete(),
+      child: card,
     );
   }
 }

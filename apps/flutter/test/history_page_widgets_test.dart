@@ -173,7 +173,7 @@ void main() {
     final indicator = tester.widget<AnimatedPositioned>(
       find.byType(AnimatedPositioned),
     );
-    expect(indicator.height, 36);
+    expect(indicator.height, 38);
     expect(
       tester
           .widgetList<SizedBox>(
@@ -182,7 +182,7 @@ void main() {
               matching: find.byType(SizedBox),
             ),
           )
-          .any((box) => box.height == 44),
+          .any((box) => box.height == 48),
       isTrue,
     );
   });

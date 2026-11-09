@@ -1647,6 +1647,68 @@ class AppLocalizationsEn extends AppLocalizations {
   String get history_serverDeleteFailed => 'Failed to delete on server.';
 
   @override
+  String history_selectedCount(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get history_selectAll => 'Select all';
+
+  @override
+  String get history_deselectAll => 'Deselect all';
+
+  @override
+  String get history_exitSelection => 'Exit selection';
+
+  @override
+  String history_bulkDeleteTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Delete $count items?',
+      one: 'Delete $count item?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get history_bulkDeleteMessage =>
+      'The selected files and incomplete scans will be permanently deleted.';
+
+  @override
+  String history_bulkDeleted(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items deleted',
+      one: '$count item deleted',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String history_bulkSyncQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items queued for sync',
+      one: '$count item queued for sync',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String history_bulkKeptLocal(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items now stored locally only',
+      one: '$count item now stored locally only',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String scanner_cameraListFailed(String error) {
     return 'Failed to list cameras: $error';
   }
