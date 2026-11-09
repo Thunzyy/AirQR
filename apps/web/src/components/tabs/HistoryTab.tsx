@@ -2093,7 +2093,11 @@ const HistoryTab: React.FC = () => {
   const handleView = async (item: HistoryItem) => {
     const resolved = await resolveHistoryItemData(item);
     if (!resolved?.fileData) {
-      logger.debug('History item data not found', { itemId: item.id });
+      logger.warn('History item data not found for preview', {
+        itemId: item.id,
+        source: item.source,
+      });
+      showToast(t('history.previewLoadFailed'), 'error');
       return;
     }
 

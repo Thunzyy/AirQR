@@ -159,6 +159,12 @@ html, body, #root {
     color: var(--airqr-accent-text);
   }
 
+  /* Primary buttons are light in dark mode; their icons follow the button text. */
+  .airqr-primary-button .airqr-icon:not(.airqr-icon-explicit),
+  .airqr-generate-button .airqr-icon:not(.airqr-icon-explicit) {
+    color: inherit;
+  }
+
   .airqr-result-download-icon {
     color: var(--airqr-text-primary) !important;
   }
