@@ -18,6 +18,15 @@ type HistoryItemsByCategory = {
   [category: string]: HistoryItem[];
 };
 
+/** Entry counts the server reports for its whole history, not just the loaded pages. */
+export type HistoryServerTotals = Record<HistoryFilter, number>;
+
+const isServerBackedItem = (item: HistoryItem): boolean =>
+  !item.isLocalOnly && (item.source === "server" || Boolean(item.isSynced));
+
+const isServerBackedIncomplete = (item: IncompleteScanItem): boolean =>
+  item.source === "server" || Boolean(item.remoteSessionId);
+
 function isSortOption(value: string | null): value is SortOption {
   return (
     value === "date-desc" ||
@@ -80,6 +89,10 @@ interface HistoryProps {
   syncStatusLabel?: string;
   syncStatusClassName?: string;
   onOpenSyncSettings?: () => void;
+  serverTotals?: HistoryServerTotals;
+  hasMoreItems?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 const History: React.FC<HistoryProps> = ({
@@ -105,6 +118,10 @@ const History: React.FC<HistoryProps> = ({
   syncStatusLabel,
   syncStatusClassName,
   onOpenSyncSettings,
+  serverTotals,
+  hasMoreItems = false,
+  isLoadingMore = false,
+  onLoadMore,
 }) => {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<HistoryFilter>(() => {
@@ -133,6 +150,8 @@ const History: React.FC<HistoryProps> = ({
     () => new Set()
   );
   const filterCountIdPrefix = useId();
+  const listRef = useRef<HTMLElement>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
   const { confirm, confirmDialog } = useConfirmDialog();
 
   const exitSelectionMode = () => {
@@ -252,11 +271,57 @@ const History: React.FC<HistoryProps> = ({
 
   // Incomplete scans are listed under "all" and "scanned", so they count there too.
   const scannedCount = searchedItems.filter((item) => item.origin === "scanned").length;
-  const filterCounts = {
+  const loadedCounts = {
     all: searchedItems.length + searchedIncompleteItems.length,
     scanned: scannedCount + searchedIncompleteItems.length,
     generated: searchedItems.length - scannedCount,
   } satisfies Record<HistoryFilter, number>;
+  // Only part of the server history is loaded, so outside a search the tabs
+  // count the server's totals plus what exists only on this device.
+  const filterCounts: Record<HistoryFilter, number> =
+    serverTotals && normalizedQuery.length === 0
+      ? (() => {
+          const localOnlyItems = items.filter((item) => !isServerBackedItem(item));
+          const localOnlyScanned = localOnlyItems.filter(
+            (item) => item.origin === "scanned"
+          ).length;
+          const localOnlyIncomplete = incompleteItems.filter(
+            (item) => !isServerBackedIncomplete(item)
+          ).length;
+          return {
+            all: Math.max(
+              loadedCounts.all,
+              serverTotals.all + localOnlyItems.length + localOnlyIncomplete
+            ),
+            scanned: Math.max(
+              loadedCounts.scanned,
+              serverTotals.scanned + localOnlyScanned + localOnlyIncomplete
+            ),
+            generated: Math.max(
+              loadedCounts.generated,
+              serverTotals.generated + localOnlyItems.length - localOnlyScanned
+            ),
+          };
+        })()
+      : loadedCounts;
+
+  // Load the next page once the end of the list comes near. The observer is
+  // rebuilt after each page so a list that still fits on screen keeps loading.
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!hasMoreItems || isLoadingMore || !onLoadMore || !sentinel) return;
+    if (!globalHas("IntersectionObserver")) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          onLoadMore();
+        }
+      },
+      { root: listRef.current, rootMargin: "600px 0px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreItems, isLoadingMore, items.length, onLoadMore]);
 
   // Only visible entries are acted on, even if more were checked before a search.
   const selectedItems = filteredItems.filter((item) => selectedItemIds.has(item.id));
@@ -698,7 +763,10 @@ const History: React.FC<HistoryProps> = ({
       </div>
 
       {/* List Content */}
-      <main className="relative z-10 flex-1 space-y-5 overflow-y-auto px-4 pb-28">
+      <main
+        ref={listRef}
+        className="relative z-10 flex-1 space-y-5 overflow-y-auto px-4 pb-28"
+      >
         {syncEnabled && syncAuthRequired && (
           <div className="airqr-liquid-alert airqr-status-warning px-4 py-4">
             <div className="flex items-start gap-3">
@@ -930,6 +998,21 @@ const History: React.FC<HistoryProps> = ({
             </div>
           </div>
         ))}
+
+        {hasMoreItems && (
+          <div
+            ref={loadMoreSentinelRef}
+            className="flex min-h-12 items-center justify-center gap-2 text-sm font-semibold text-[var(--airqr-text-muted)]"
+            aria-live="polite"
+          >
+            {isLoadingMore && (
+              <>
+                <Icon name="sync" className="animate-spin text-base" />
+                <span>{t("history.loadingMore")}</span>
+              </>
+            )}
+          </div>
+        )}
       </main>
       {confirmDialog}
     </div>

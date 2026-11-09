@@ -325,6 +325,7 @@ const fr = {
     cancelSelection: 'Annuler la sélection',
     selectedCount_one: '{{count}} sélectionné',
     selectedCount_other: '{{count}} sélectionnés',
+    loadingMore: 'Chargement de la suite…',
     selectAll: 'Tout sélectionner',
     deselectAll: 'Tout désélectionner',
     deleteSelected: 'Supprimer la sélection',

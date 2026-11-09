@@ -59,6 +59,11 @@ def apply_surface_headers(handler: "SyncRequestHandler") -> None:
             "Access-Control-Allow-Methods",
             "GET, POST, DELETE, OPTIONS",
         )
+        handler.send_header(
+            "Access-Control-Expose-Headers",
+            "ETag, Last-Modified, X-Total-Count, X-Total-Count-Scanned, "
+            "X-Total-Count-Generated",
+        )
 
     if _is_api_path(path):
         handler.send_header("Cross-Origin-Resource-Policy", "cross-origin")

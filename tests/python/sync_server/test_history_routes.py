@@ -780,3 +780,93 @@ def test_handle_history_item_sanitizes_stream_upload_body_errors(tmp_path: Path)
         {"error": "Invalid request body"},
     )
     assert storage.read_history_item("history-raw") is None
+
+
+def _history_handler(storage: Storage, path: str, headers: dict | None = None) -> MagicMock:
+    handler = MagicMock(spec=SyncRequestHandler)
+    handler.context = MagicMock()
+    handler.context.storage = storage
+    handler._require_auth = MagicMock(return_value=True)
+    handler._send_json = MagicMock()
+    handler.headers = headers or {}
+    handler.path = path
+    return handler
+
+
+def _seed_paged_history(storage: Storage) -> None:
+    for index in range(3):
+        storage.write_session(
+            f"scan-{index}",
+            {
+                "sessionId": f"scan-{index}",
+                "filename": f"scan-{index}.bin",
+                "completed": True,
+                "createdAt": f"2026-04-0{index + 1}T09:00:00Z",
+                "updatedAt": f"2026-04-0{index + 1}T10:00:00Z",
+            },
+        )
+    storage.write_history_item(
+        "history-1",
+        {
+            "historyId": "history-1",
+            "title": "archive",
+            "createdAt": "2026-04-09T08:00:00Z",
+            "updatedAt": "2026-04-09T11:00:00Z",
+        },
+    )
+
+
+def test_handle_history_all_pages_with_offset_and_reports_origin_totals(
+    tmp_path: Path,
+) -> None:
+    storage = _make_storage(tmp_path / "storage")
+    _seed_paged_history(storage)
+
+    handler = _history_handler(storage, "/api/history?limit=2&offset=1")
+    handle_history_all(handler)
+
+    status, payload, headers = handler._send_json.call_args.args
+    assert status == HTTPStatus.OK
+    assert [entry["id"] for entry in payload] == ["scan-2", "scan-1"]
+    assert headers["X-Total-Count"] == "4"
+    assert headers["X-Total-Count-Scanned"] == "3"
+    assert headers["X-Total-Count-Generated"] == "1"
+
+
+def test_handle_history_all_offset_past_end_returns_empty_page(tmp_path: Path) -> None:
+    storage = _make_storage(tmp_path / "storage")
+    _seed_paged_history(storage)
+
+    handler = _history_handler(storage, "/api/history?limit=2&offset=10")
+    handle_history_all(handler)
+
+    status, payload, headers = handler._send_json.call_args.args
+    assert status == HTTPStatus.OK
+    assert payload == []
+    assert headers["X-Total-Count"] == "4"
+
+
+def test_handle_history_all_first_page_etag_changes_when_later_entry_deleted(
+    tmp_path: Path,
+) -> None:
+    storage = _make_storage(tmp_path / "storage")
+    _seed_paged_history(storage)
+
+    first = _history_handler(storage, "/api/history?limit=1")
+    handle_history_all(first)
+    _, _, first_headers = first._send_json.call_args.args
+
+    storage.delete_session("scan-0")
+
+    second = _history_handler(
+        storage,
+        "/api/history?limit=1",
+        headers={"If-None-Match": first_headers["ETag"]},
+    )
+    handle_history_all(second)
+
+    second._send_json.assert_called_once()
+    status, payload, headers = second._send_json.call_args.args
+    assert status == HTTPStatus.OK
+    assert [entry["id"] for entry in payload] == ["history-1"]
+    assert headers["X-Total-Count"] == "3"

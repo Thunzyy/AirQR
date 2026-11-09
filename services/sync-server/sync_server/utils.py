@@ -139,7 +139,10 @@ def parse_limit(value: Optional[str], default: int = 500, maximum: int = 2000) -
     return min(parsed, maximum)
 
 
-def build_history_etag(entries: list[Dict[str, Any]]) -> tuple[str, Optional[datetime]]:
+def build_history_etag(
+    entries: list[Dict[str, Any]],
+    scope: Optional[str] = None,
+) -> tuple[str, Optional[datetime]]:
     latest_dt: Optional[datetime] = None
     # Include receivedCount in ETag so incomplete scans trigger updates
     received_counts = []
@@ -153,4 +156,6 @@ def build_history_etag(entries: list[Dict[str, Any]]) -> tuple[str, Optional[dat
     latest_value = latest_dt.isoformat() if latest_dt else "none"
     received_sum = sum(received_counts)
     etag_source = f"{len(entries)}:{latest_value}:{received_sum}"
+    if scope:
+        etag_source = f"{etag_source}:{scope}"
     return compute_hash(etag_source.encode("utf-8")), latest_dt

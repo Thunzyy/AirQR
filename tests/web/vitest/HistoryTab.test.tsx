@@ -524,6 +524,163 @@ describe("HistoryTab", () => {
     });
   });
 
+  describe("server history paging", () => {
+    const scannedEntry = (index: number) => ({
+      sessionId: `scan-${index}`,
+      origin: "scanned",
+      filename: `scan-${index}.bin`,
+      completed: true,
+      size: 10,
+      createdAt: "2026-04-16T10:00:00Z",
+      updatedAt: "2026-04-16T10:00:00Z",
+    });
+
+    const pagingProps = () =>
+      historyPropsMock.mock.calls.at(-1)?.[0] as {
+        items: Array<{ id: string }>;
+        serverTotals?: { all: number; scanned: number; generated: number };
+        hasMoreItems?: boolean;
+        isLoadingMore?: boolean;
+        onLoadMore?: () => void;
+      };
+
+    const firstPage = Array.from({ length: 500 }, (_, index) => scannedEntry(index));
+
+    it("passes the server's real totals and loads the next page on demand", async () => {
+      fetchServerHistoryMock
+        .mockResolvedValueOnce({
+          entries: firstPage,
+          etag: "etag-page-1",
+          totalCount: 501,
+          originTotals: { scanned: 501, generated: 0 },
+        })
+        .mockResolvedValueOnce({
+          entries: firstPage,
+          etag: "etag-page-1b",
+          totalCount: 501,
+          originTotals: { scanned: 501, generated: 0 },
+        })
+        .mockResolvedValueOnce({
+          entries: [scannedEntry(500)],
+          totalCount: 501,
+          originTotals: { scanned: 501, generated: 0 },
+        });
+
+      render(<HistoryTab />);
+
+      await waitFor(() => {
+        expect(pagingProps().serverTotals).toEqual({ all: 501, scanned: 501, generated: 0 });
+        expect(pagingProps().hasMoreItems).toBe(true);
+      });
+      expect(fetchServerHistoryMock).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({ offset: 0, etag: undefined })
+      );
+
+      act(() => {
+        pagingProps().onLoadMore?.();
+      });
+
+      await waitFor(() => {
+        expect(pagingProps().items.map((item) => item.id)).toEqual(
+          expect.arrayContaining(["scan-0", "scan-499", "scan-500"])
+        );
+        expect(pagingProps().hasMoreItems).toBe(false);
+        expect(pagingProps().isLoadingMore).toBe(false);
+      });
+      expect(fetchServerHistoryMock).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({ offset: 500 })
+      );
+    });
+
+    it("refreshes the server totals after deleting a server entry", async () => {
+      fetchServerHistoryMock
+        .mockResolvedValueOnce({
+          entries: [scannedEntry(1), scannedEntry(2)],
+          etag: "etag-before-delete",
+          totalCount: 2,
+          originTotals: { scanned: 2, generated: 0 },
+        })
+        .mockResolvedValueOnce({
+          entries: [scannedEntry(2)],
+          etag: "etag-after-delete",
+          totalCount: 1,
+          originTotals: { scanned: 1, generated: 0 },
+        });
+      deleteServerSessionMock.mockResolvedValue(undefined);
+
+      render(<HistoryTab />);
+      await waitFor(() => expect(pagingProps().serverTotals?.all).toBe(2));
+
+      const target = pagingProps().items.find((item) => item.id === "scan-1");
+      expect(target).toBeDefined();
+      act(() => {
+        (pagingProps() as unknown as { onDelete: (item: unknown) => void }).onDelete(target);
+      });
+
+      await waitFor(() => {
+        expect(deleteServerSessionMock).toHaveBeenCalledWith(expect.anything(), "scan-1");
+        expect(pagingProps().serverTotals).toEqual({ all: 1, scanned: 1, generated: 0 });
+      });
+    });
+
+    it("keeps already loaded pages when a later refresh runs", async () => {
+      fetchServerHistoryMock
+        .mockResolvedValueOnce({
+          entries: firstPage,
+          etag: "etag-a",
+          totalCount: 501,
+          originTotals: { scanned: 501, generated: 0 },
+        })
+        .mockResolvedValueOnce({
+          entries: firstPage,
+          etag: "etag-a2",
+          totalCount: 501,
+          originTotals: { scanned: 501, generated: 0 },
+        })
+        .mockResolvedValueOnce({
+          entries: [scannedEntry(500)],
+          totalCount: 501,
+          originTotals: { scanned: 501, generated: 0 },
+        })
+        .mockResolvedValueOnce({
+          entries: firstPage,
+          etag: "etag-b",
+          totalCount: 501,
+          originTotals: { scanned: 501, generated: 0 },
+        })
+        .mockResolvedValueOnce({
+          entries: [scannedEntry(500)],
+          totalCount: 501,
+          originTotals: { scanned: 501, generated: 0 },
+        });
+
+      render(<HistoryTab />);
+      await waitFor(() => expect(pagingProps().hasMoreItems).toBe(true));
+      act(() => {
+        pagingProps().onLoadMore?.();
+      });
+      await waitFor(() => expect(pagingProps().hasMoreItems).toBe(false));
+
+      const eventHandler = subscribeMock.mock.calls[0]?.[0] as (event: {
+        type: string;
+        payload: Record<string, unknown>;
+      }) => void;
+      act(() => {
+        eventHandler({ type: "scan-progress", payload: {} });
+      });
+
+      await waitFor(() => expect(fetchServerHistoryMock).toHaveBeenCalledTimes(5));
+      await waitFor(() => {
+        expect(pagingProps().items.map((item) => item.id)).toEqual(
+          expect.arrayContaining(["scan-0", "scan-500"])
+        );
+        expect(pagingProps().hasMoreItems).toBe(false);
+      });
+    });
+  });
+
   it("queues a second refresh when a history event arrives during an in-flight load", async () => {
     let resolveFirstFetch:
       | ((value: {
