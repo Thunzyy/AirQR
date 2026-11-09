@@ -678,6 +678,55 @@ describe("HistoryTab", () => {
     }
   });
 
+  it("drops a synced item the server no longer has when it is opened", async () => {
+    const { ServerFileNotFoundError } = await import("@web/services/serverErrors");
+    const serverItem = {
+      id: "gone-1",
+      remoteHistoryId: "gone-1",
+      origin: "generated" as const,
+      type: "file" as const,
+      title: "old.gif",
+      subtitle: "2026-07-23 - 22:07 - 25 KB",
+      date: "2026-07-23",
+      mimeType: "image/gif",
+      size: 25_000,
+      source: "server" as const,
+      isSynced: true,
+    };
+
+    useHistoryStore.setState({
+      ...useHistoryStore.getState(),
+      items: [serverItem],
+      incompleteItems: [],
+    });
+    fetchServerHistoryFileMock.mockRejectedValue(
+      new ServerFileNotFoundError("File fetch failed: 404")
+    );
+
+    render(<HistoryTab />);
+
+    await waitFor(() => {
+      expect(getHistoryProps()?.onView).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      await getHistoryProps()?.onView?.(serverItem);
+    });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(useHistoryStore.getState().items.map((item) => item.id)).not.toContain("gone-1");
+    await waitFor(() => {
+      expect(deleteHistoryItemMock).toHaveBeenCalledWith("gone-1");
+    });
+    expect(useToastStore.getState()).toEqual(
+      expect.objectContaining({
+        visible: true,
+        type: "warning",
+        message: "This item was deleted from the server.",
+      })
+    );
+  });
+
   it("tells the user when a history preview cannot be loaded", async () => {
     const historyItem = {
       id: "missing-data",
