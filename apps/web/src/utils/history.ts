@@ -611,7 +611,7 @@ export function createHistoryItem(params: CreateHistoryItemParams): HistoryItem 
     date: dateLabel,
     sortTimestamp,
     size,
-    category: 'today',
+    category: formatDateCategory(date),
     fileData,
     mimeType,
     totalFrames,

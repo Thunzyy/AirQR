@@ -147,16 +147,23 @@ describe("History Component", () => {
       },
     ];
 
-    render(<History items={datedItems} />);
-    await userEvent.click(screen.getByText("Generated"));
-    await userEvent.click(screen.getByTitle("Sort"));
-    await userEvent.click(screen.getByText("Oldest first"));
+    // Sections come from the timestamps, so pin "today" to the fixture's day.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-03-29T12:00:00.000Z"));
+    try {
+      render(<History items={datedItems} />);
+      await userEvent.click(screen.getByText("Generated"));
+      await userEvent.click(screen.getByTitle("Sort"));
+      await userEvent.click(screen.getByText("Oldest first"));
 
-    const headings = screen
-      .getAllByRole("heading", { level: 3 })
-      .map((node) => node.textContent);
+      const headings = screen
+        .getAllByRole("heading", { level: 3 })
+        .map((node) => node.textContent);
 
-    expect(headings).toEqual(["2026-03-20", "Yesterday", "Today"]);
+      expect(headings).toEqual(["2026-03-20", "Yesterday", "Today"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("calls onDownload when download button is clicked", async () => {
@@ -468,6 +475,59 @@ describe("History Component", () => {
     await userEvent.click(screen.getByRole("button", { name: "Clear History" }));
 
     expect(onClearHistory).toHaveBeenCalledTimes(1);
+  });
+
+  describe("date sections", () => {
+    const DAY = 24 * 60 * 60 * 1000;
+
+    it("groups an entry by its timestamp even when its stored category is stale", () => {
+      const threeDaysAgo = new Date(Date.now() - 3 * DAY);
+      const dateKey = threeDaysAgo.toISOString().split("T")[0];
+
+      render(
+        <History
+          items={[
+            {
+              id: "stale",
+              type: "file",
+              origin: "scanned",
+              title: "old-scan.pdf",
+              subtitle: "1 KB",
+              date: dateKey,
+              sortTimestamp: threeDaysAgo.toISOString(),
+              category: "today",
+            },
+          ]}
+        />
+      );
+
+      expect(screen.queryByText("Today")).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: dateKey })).toBeInTheDocument();
+    });
+
+    it("moves an entry from yesterday into the yesterday section", () => {
+      const yesterday = new Date(Date.now() - DAY);
+
+      render(
+        <History
+          items={[
+            {
+              id: "yesterday",
+              type: "file",
+              origin: "generated",
+              title: "clip.gif",
+              subtitle: "1 KB",
+              date: yesterday.toISOString().split("T")[0],
+              sortTimestamp: yesterday.toISOString(),
+              category: "today",
+            },
+          ]}
+        />
+      );
+
+      expect(screen.queryByText("Today")).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Yesterday" })).toBeInTheDocument();
+    });
   });
 
   describe("tab counters", () => {
