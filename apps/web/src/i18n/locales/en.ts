@@ -318,6 +318,19 @@ const en = {
     resumePreparationFailed:
       'Failed to prepare scan resume. Check browser storage and server connection.',
     textNote: 'Text note',
+    selectItems: 'Select items',
+    cancelSelection: 'Cancel selection',
+    selectedCount: '{{count}} selected',
+    selectAll: 'Select all',
+    deselectAll: 'Deselect all',
+    deleteSelected: 'Delete selected',
+    downloadSelected: 'Download selected',
+    syncSelected: 'Sync selected',
+    keepLocalSelected: 'Keep selected local only',
+    bulkDeleteConfirm_one: 'Delete {{count}} item? This cannot be undone.',
+    bulkDeleteConfirm_other: 'Delete {{count}} items? This cannot be undone.',
+    bulkDownloadFailed_one: '{{count}} item could not be added to the archive.',
+    bulkDownloadFailed_other: '{{count}} items could not be added to the archive.',
   },
 
   // Settings

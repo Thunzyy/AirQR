@@ -318,6 +318,20 @@ const fr = {
     resumePreparationFailed:
       'Impossible de preparer la reprise du scan. Verifiez le stockage du navigateur et la connexion au serveur.',
     textNote: 'Note texte',
+    selectItems: 'Sélectionner des éléments',
+    cancelSelection: 'Annuler la sélection',
+    selectedCount_one: '{{count}} sélectionné',
+    selectedCount_other: '{{count}} sélectionnés',
+    selectAll: 'Tout sélectionner',
+    deselectAll: 'Tout désélectionner',
+    deleteSelected: 'Supprimer la sélection',
+    downloadSelected: 'Télécharger la sélection',
+    syncSelected: 'Synchroniser la sélection',
+    keepLocalSelected: 'Garder la sélection en local uniquement',
+    bulkDeleteConfirm_one: 'Supprimer {{count}} élément ? Cette action est irréversible.',
+    bulkDeleteConfirm_other: 'Supprimer {{count}} éléments ? Cette action est irréversible.',
+    bulkDownloadFailed_one: "{{count}} élément n'a pas pu être ajouté à l'archive.",
+    bulkDownloadFailed_other: "{{count}} éléments n'ont pas pu être ajoutés à l'archive.",
   },
 
   // Settings

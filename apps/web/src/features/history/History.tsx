@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "../../components/ui/Icon";
 import { globalHas } from "../../parse/wire";
@@ -60,6 +60,7 @@ interface HistoryProps {
   items: HistoryItem[];
   incompleteItems?: IncompleteScanItem[];
   onDownload?: (item: HistoryItem) => void;
+  onDownloadMany?: (items: HistoryItem[]) => void;
   onDelete?: (item: HistoryItem) => void;
   onResume?: (item: IncompleteScanItem) => void;
   onDeleteIncomplete?: (item: IncompleteScanItem) => void;
@@ -84,6 +85,7 @@ const History: React.FC<HistoryProps> = ({
   items,
   incompleteItems = [],
   onDownload,
+  onDownloadMany,
   onDelete,
   onResume,
   onDeleteIncomplete,
@@ -122,6 +124,38 @@ const History: React.FC<HistoryProps> = ({
   });
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  const [selectedIncompleteIds, setSelectedIncompleteIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  const filterCountIdPrefix = useId();
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedItemIds(new Set());
+    setSelectedIncompleteIds(new Set());
+  };
+
+  const changeFilter = (value: HistoryFilter) => {
+    setFilter(value);
+    exitSelectionMode();
+  };
+
+  useEffect(() => {
+    if (!selectionMode) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectionMode(false);
+        setSelectedItemIds(new Set());
+        setSelectedIncompleteIds(new Set());
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [selectionMode]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -197,23 +231,103 @@ const History: React.FC<HistoryProps> = ({
     });
   };
 
-  const filteredItems = sortItems(
-    items
-      .filter((item) => filter === "all" || item.origin === filter)
-      .filter(matchesHistoryItem)
-  );
-  const filteredIncompleteItems =
-    filter !== "generated" && normalizedQuery.length > 0
+  const searchedItems = items.filter(matchesHistoryItem);
+  const searchedIncompleteItems =
+    normalizedQuery.length > 0
       ? incompleteItems.filter(
           (item) =>
             matchesQuery(item.filename) ||
             matchesQuery(item.sessionId) ||
             matchesQuery(item.date)
         )
-      : filter !== "generated"
-        ? incompleteItems
-        : [];
+      : incompleteItems;
+  const filteredItems = sortItems(
+    searchedItems.filter((item) => filter === "all" || item.origin === filter)
+  );
+  const filteredIncompleteItems =
+    filter !== "generated" ? searchedIncompleteItems : [];
   const hasAnyHistory = items.length > 0 || incompleteItems.length > 0;
+
+  // Incomplete scans are listed under "all" and "scanned", so they count there too.
+  const scannedCount = searchedItems.filter((item) => item.origin === "scanned").length;
+  const filterCounts = {
+    all: searchedItems.length + searchedIncompleteItems.length,
+    scanned: scannedCount + searchedIncompleteItems.length,
+    generated: searchedItems.length - scannedCount,
+  } satisfies Record<HistoryFilter, number>;
+
+  // Only visible entries are acted on, even if more were checked before a search.
+  const selectedItems = filteredItems.filter((item) => selectedItemIds.has(item.id));
+  const selectedIncompleteItems = filteredIncompleteItems.filter((item) =>
+    selectedIncompleteIds.has(item.sessionId)
+  );
+  const selectedCount = selectedItems.length + selectedIncompleteItems.length;
+  const selectableCount = filteredItems.length + filteredIncompleteItems.length;
+  const allVisibleSelected = selectableCount > 0 && selectedCount === selectableCount;
+  const syncableSelectedItems = selectedItems.filter(
+    (item) => item.isLocalOnly || item.syncFailed
+  );
+  const detachableSelectedItems = selectedItems.filter(
+    (item) => item.isSynced && !item.isLocalOnly
+  );
+
+  const toggleIdInSet = (set: ReadonlySet<string>, id: string): Set<string> => {
+    const next = new Set(set);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    return next;
+  };
+
+  const toggleItemSelection = (item: HistoryItem) =>
+    setSelectedItemIds((prev) => toggleIdInSet(prev, item.id));
+
+  const toggleIncompleteSelection = (item: IncompleteScanItem) =>
+    setSelectedIncompleteIds((prev) => toggleIdInSet(prev, item.sessionId));
+
+  const toggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedItemIds(new Set());
+      setSelectedIncompleteIds(new Set());
+      return;
+    }
+    setSelectedItemIds(new Set(filteredItems.map((item) => item.id)));
+    setSelectedIncompleteIds(new Set(filteredIncompleteItems.map((item) => item.sessionId)));
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedCount === 0) return;
+    if (!window.confirm(t("history.bulkDeleteConfirm", { count: selectedCount }))) {
+      return;
+    }
+    selectedItems.forEach((item) => onDelete?.(item));
+    selectedIncompleteItems.forEach((item) => onDeleteIncomplete?.(item));
+    exitSelectionMode();
+  };
+
+  const handleDownloadSelected = () => {
+    if (selectedItems.length === 0) return;
+    if (selectedItems.length === 1) {
+      onDownload?.(selectedItems[0]);
+    } else if (onDownloadMany) {
+      onDownloadMany(selectedItems);
+    } else {
+      selectedItems.forEach((item) => onDownload?.(item));
+    }
+    exitSelectionMode();
+  };
+
+  const handleSyncSelected = () => {
+    syncableSelectedItems.forEach((item) => onSyncItem?.(item));
+    exitSelectionMode();
+  };
+
+  const handleKeepLocalSelected = () => {
+    detachableSelectedItems.forEach((item) => onKeepLocal?.(item));
+    exitSelectionMode();
+  };
 
   // Group items by category for display
   // For "older" items, group by actual date instead
@@ -292,6 +406,88 @@ const History: React.FC<HistoryProps> = ({
   return (
     <div className="relative flex h-full flex-col overflow-hidden text-[var(--airqr-text-primary)] animate-fade-in">
       <div className="relative z-40 shrink-0 px-4 pb-3 pt-5">
+        {selectionMode ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={exitSelectionMode}
+                className="flex size-11 shrink-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-primary)] transition-colors hover:bg-[var(--airqr-action-hover)]"
+                aria-label={t("history.cancelSelection")}
+                title={t("history.cancelSelection")}
+              >
+                <Icon name="close" className="text-xl" />
+              </button>
+              <span
+                className="mr-auto min-w-0 truncate text-[16px] font-bold tabular-nums text-[var(--airqr-text-primary)]"
+                aria-live="polite"
+              >
+                {t("history.selectedCount", { count: selectedCount })}
+              </span>
+              {onSyncItem && syncableSelectedItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSyncSelected}
+                  className="airqr-action-button airqr-action-button-accent flex size-11 shrink-0 items-center justify-center rounded-full border transition-colors"
+                  aria-label={t("history.syncSelected")}
+                  title={t("history.syncSelected")}
+                >
+                  <Icon name="cloud_upload" className="airqr-sync-icon text-xl" />
+                </button>
+              )}
+              {onKeepLocal && detachableSelectedItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleKeepLocalSelected}
+                  className="airqr-action-button flex size-11 shrink-0 items-center justify-center rounded-full border text-[var(--airqr-warning-text)] transition-colors"
+                  aria-label={t("history.keepLocalSelected")}
+                  title={t("history.keepLocalSelected")}
+                >
+                  <Icon name="cloud_off" className="text-xl" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleDownloadSelected}
+                disabled={selectedItems.length === 0}
+                className={`flex size-11 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                  selectedItems.length === 0
+                    ? "airqr-action-button cursor-not-allowed opacity-50"
+                    : "airqr-action-button airqr-action-button-accent"
+                }`}
+                aria-label={t("history.downloadSelected")}
+                title={t("history.downloadSelected")}
+              >
+                <Icon name="download" className="text-xl" />
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                disabled={selectedCount === 0}
+                className={`flex size-11 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                  selectedCount === 0
+                    ? "airqr-action-button cursor-not-allowed opacity-50"
+                    : "airqr-action-button airqr-action-button-danger"
+                }`}
+                aria-label={t("history.deleteSelected")}
+                title={t("history.deleteSelected")}
+              >
+                <Icon name="delete" className="text-xl" />
+              </button>
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={toggleSelectAllVisible}
+                disabled={selectableCount === 0}
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] px-4 py-2 text-sm font-bold text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Icon name={allVisibleSelected ? "remove" : "checklist"} className="text-base" />
+                <span>{allVisibleSelected ? t("history.deselectAll") : t("history.selectAll")}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="flex items-center justify-end gap-2">
           {syncStatusLabel ? (
             <span
@@ -320,6 +516,19 @@ const History: React.FC<HistoryProps> = ({
             aria-expanded={searchOpen}
           >
             <Icon name={searchOpen ? "close" : "search"} className="text-[26px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSortDropdownOpen(false);
+              setSelectionMode(true);
+            }}
+            disabled={!hasAnyHistory}
+            className="flex size-12 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={t("history.selectItems")}
+            title={t("history.selectItems")}
+          >
+            <Icon name="checklist" className="text-xl" />
           </button>
           {/* Sort dropdown */}
           <div className="relative" ref={sortDropdownRef}>
@@ -407,6 +616,7 @@ const History: React.FC<HistoryProps> = ({
             </button>
           )}
         </div>
+        )}
 
         {searchOpen ? (
           <div className="airqr-liquid-alert mt-4 flex min-h-14 items-center gap-3 px-4 py-3">
@@ -432,7 +642,7 @@ const History: React.FC<HistoryProps> = ({
           </div>
         ) : null}
 
-        <div className="relative mt-5 grid h-[52px] grid-cols-3 rounded-[22px] bg-[var(--airqr-nav-surface)] p-1 shadow-[0_16px_44px_rgba(56,83,105,0.18)] backdrop-blur-2xl">
+        <div className="relative mt-5 grid h-12 grid-cols-3 rounded-2xl border border-[var(--airqr-control-border)] bg-[var(--airqr-nav-surface)] p-1">
           <div
             aria-hidden="true"
             className="absolute inset-y-1 left-1 z-0 transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
@@ -441,20 +651,34 @@ const History: React.FC<HistoryProps> = ({
               transform: `translateX(${activeFilterIndex * 100}%)`,
             }}
           >
-            <div className="h-full rounded-[18px] bg-[var(--airqr-nav-active)] shadow-[0_10px_28px_rgba(56,83,105,0.16)]" />
+            <div className="h-full rounded-xl bg-[var(--airqr-nav-active)] shadow-[0_1px_2px_rgb(0_0_0/0.14)]" />
           </div>
           {filterTabs.map(([value, label]) => (
             <button
               key={value}
               type="button"
-              onClick={() => setFilter(value)}
-              className={`relative z-10 flex items-center justify-center rounded-[18px] text-[16px] font-bold transition-colors duration-200 ${
+              onClick={() => changeFilter(value)}
+              aria-describedby={`${filterCountIdPrefix}-${value}`}
+              className={`relative z-10 flex min-w-0 items-baseline justify-center gap-1.5 rounded-xl px-1.5 text-[15px] font-semibold tracking-[-0.01em] transition-colors duration-200 ${
                 filter === value
                   ? "text-[var(--airqr-text-primary)]"
-                  : "text-[var(--airqr-text-muted)] hover:text-[var(--airqr-text-primary)]"
+                  : "text-[var(--airqr-text-muted)] hover:text-[var(--airqr-text-secondary)]"
               }`}
             >
-              <span className="truncate">{label}</span>
+              <span className="truncate leading-[40px]">{label}</span>
+              {/* Hidden from the name so the tab stays "All"; still read as its description. */}
+              <span
+                id={`${filterCountIdPrefix}-${value}`}
+                aria-hidden="true"
+                data-testid={`history-filter-count-${value}`}
+                className={`shrink-0 text-[13px] font-medium tabular-nums transition-colors duration-200 ${
+                  filter === value
+                    ? "text-[var(--airqr-text-secondary)]"
+                    : "text-[var(--airqr-text-muted)]"
+                }`}
+              >
+                {filterCounts[value]}
+              </span>
             </button>
           ))}
         </div>
@@ -531,14 +755,28 @@ const History: React.FC<HistoryProps> = ({
                     ? `${serverTotal}`
                     : totalLabel;
 
+                const isSelected = selectionMode && selectedIncompleteIds.has(item.sessionId);
+                const displayName = resolveIncompleteScanName(item.filename, item.sessionId);
+
                 return (
                   <div
                     key={item.sessionId}
-                    className="airqr-liquid-card group relative flex cursor-pointer flex-col overflow-hidden rounded-[30px] transition-all hover:bg-[var(--airqr-action-hover)]"
+                    className={`airqr-liquid-card group relative flex cursor-pointer flex-col overflow-hidden rounded-[30px] transition-all hover:bg-[var(--airqr-action-hover)] ${
+                      isSelected ? "outline outline-2 -outline-offset-2 outline-[var(--airqr-accent-text)]" : ""
+                    }`}
                     style={ITEM_VISIBILITY_STYLE}
-                    onClick={() => onResume?.(item)}
+                    onClick={() =>
+                      selectionMode ? toggleIncompleteSelection(item) : onResume?.(item)
+                    }
                   >
                     <div className="flex items-center gap-4 p-3 pb-2">
+                      {selectionMode && (
+                        <HistorySelectionCheckbox
+                          checked={isSelected}
+                          label={displayName}
+                          onToggle={() => toggleIncompleteSelection(item)}
+                        />
+                      )}
                       <div className="relative">
                         <div className="airqr-liquid-icon flex h-12 w-12 shrink-0 text-[var(--airqr-text-primary)]">
                           <Icon name="autorenew" />
@@ -555,7 +793,7 @@ const History: React.FC<HistoryProps> = ({
                       <div className="flex flex-1 flex-col overflow-hidden">
                         <div className="flex items-center gap-2">
                           <p className="truncate text-base font-bold text-[var(--airqr-text-primary)]">
-                            {resolveIncompleteScanName(item.filename, item.sessionId)}
+                            {displayName}
                           </p>
                           {item.deviceName && (
                             <span className="shrink-0 rounded-full bg-[var(--airqr-warning-surface)] px-2 py-0.5 text-xs font-bold text-[var(--airqr-warning-text)]">
@@ -583,6 +821,7 @@ const History: React.FC<HistoryProps> = ({
                           {item.date}
                         </p>
                       </div>
+                {!selectionMode && (
                 <div className="flex items-center gap-1">
                   {/* Sync button - show when local (not from server) */}
                       {syncEnabled &&
@@ -638,6 +877,7 @@ const History: React.FC<HistoryProps> = ({
                         <Icon name="delete" />
                       </button>
                     </div>
+                )}
                   </div>
                     {/* Progress bar */}
                     <div className="airqr-progress-track h-1.5 w-full">
@@ -669,6 +909,9 @@ const History: React.FC<HistoryProps> = ({
                   onView={onView}
                   onKeepLocal={onKeepLocal}
                   onSyncItem={onSyncItem}
+                  selectionMode={selectionMode}
+                  selected={selectionMode && selectedItemIds.has(item.id)}
+                  onToggleSelected={toggleItemSelection}
                 />
               ))}
             </div>
@@ -679,6 +922,21 @@ const History: React.FC<HistoryProps> = ({
   );
 };
 
+const HistorySelectionCheckbox: React.FC<{
+  checked: boolean;
+  label: string;
+  onToggle: () => void;
+}> = ({ checked, label, onToggle }) => (
+  <input
+    type="checkbox"
+    checked={checked}
+    onChange={onToggle}
+    onClick={(e) => e.stopPropagation()}
+    aria-label={label}
+    className="size-5 shrink-0 cursor-pointer accent-[var(--airqr-accent-text)]"
+  />
+);
+
 const HistoryListItem: React.FC<{
   item: HistoryItem;
   getIcon: (item: HistoryItem) => string;
@@ -687,7 +945,21 @@ const HistoryListItem: React.FC<{
   onView?: (item: HistoryItem) => void;
   onKeepLocal?: (item: HistoryItem) => void;
   onSyncItem?: (item: HistoryItem) => void;
-}> = ({ item, getIcon, onDownload, onDelete, onView, onKeepLocal, onSyncItem }) => {
+  selectionMode?: boolean;
+  selected?: boolean;
+  onToggleSelected?: (item: HistoryItem) => void;
+}> = ({
+  item,
+  getIcon,
+  onDownload,
+  onDelete,
+  onView,
+  onKeepLocal,
+  onSyncItem,
+  selectionMode = false,
+  selected = false,
+  onToggleSelected,
+}) => {
   const { t } = useTranslation();
   const isViewable = isHistoryItemPreviewable(item);
 
@@ -699,6 +971,10 @@ const HistoryListItem: React.FC<{
   const showSyncButton = item.isLocalOnly || item.syncFailed;
 
   const handleRowClick = () => {
+    if (selectionMode) {
+      onToggleSelected?.(item);
+      return;
+    }
     if (isViewable && onView) {
       onView(item);
     }
@@ -706,10 +982,19 @@ const HistoryListItem: React.FC<{
 
   return (
     <div
-      className="airqr-liquid-card group relative flex cursor-pointer items-center gap-3 rounded-[28px] p-3 transition-all hover:bg-[var(--airqr-card-hover)]"
+      className={`airqr-liquid-card group relative flex cursor-pointer items-center gap-3 rounded-[28px] p-3 transition-all hover:bg-[var(--airqr-card-hover)] ${
+        selected ? "outline outline-2 -outline-offset-2 outline-[var(--airqr-accent-text)]" : ""
+      }`}
       style={ITEM_VISIBILITY_STYLE}
       onClick={handleRowClick}
     >
+      {selectionMode && (
+        <HistorySelectionCheckbox
+          checked={selected}
+          label={item.title}
+          onToggle={() => onToggleSelected?.(item)}
+        />
+      )}
       <div className="relative">
         <div className="airqr-file-icon h-12 w-12">
           <Icon name={getIcon(item)} className="text-[22px]" />
@@ -736,6 +1021,7 @@ const HistoryListItem: React.FC<{
           {item.subtitle}
         </p>
       </div>
+      {!selectionMode && (
       <div className="flex items-center gap-1">
         {isViewable && onView && (
           <button
@@ -802,6 +1088,7 @@ const HistoryListItem: React.FC<{
           <Icon name="delete" />
         </button>
       </div>
+      )}
     </div>
   );
 };

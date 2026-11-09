@@ -469,4 +469,234 @@ describe("History Component", () => {
 
     expect(onClearHistory).toHaveBeenCalledTimes(1);
   });
+
+  describe("tab counters", () => {
+    const incompleteItem = {
+      sessionId: "incomplete-1",
+      filename: "partial.bin",
+      received: 3,
+      total: 10,
+      date: "2026-03-29",
+    };
+
+    it("shows how many entries each filter tab contains", () => {
+      render(<History items={mockItems} incompleteItems={[incompleteItem]} />);
+
+      expect(screen.getByTestId("history-filter-count-all")).toHaveTextContent("3");
+      expect(screen.getByTestId("history-filter-count-scanned")).toHaveTextContent("2");
+      expect(screen.getByTestId("history-filter-count-generated")).toHaveTextContent("1");
+    });
+
+    it("keeps the tab accessible names unchanged", () => {
+      render(<History items={mockItems} />);
+
+      expect(screen.getByRole("button", { name: "All" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Scanned" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Generated" })).toBeInTheDocument();
+    });
+
+    it("updates the counters with the search query", async () => {
+      render(<History items={mockItems} incompleteItems={[incompleteItem]} />);
+
+      await userEvent.click(screen.getByRole("button", { name: "Search history" }));
+      await userEvent.type(screen.getByRole("searchbox"), "output");
+
+      expect(screen.getByTestId("history-filter-count-all")).toHaveTextContent("1");
+      expect(screen.getByTestId("history-filter-count-scanned")).toHaveTextContent("0");
+      expect(screen.getByTestId("history-filter-count-generated")).toHaveTextContent("1");
+    });
+  });
+
+  describe("selection mode", () => {
+    const syncableItems = [
+      { ...mockItems[0], isLocalOnly: true },
+      { ...mockItems[1], isSynced: true },
+    ];
+
+    const enterSelection = () =>
+      userEvent.click(screen.getByRole("button", { name: "Select items" }));
+
+    it("lets the user check items and shows the selected count", async () => {
+      render(<History items={mockItems} />);
+
+      await enterSelection();
+      expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+      expect(screen.getByText("0 selected")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByText("test.txt"));
+
+      expect(screen.getByRole("checkbox", { name: "test.txt" })).toBeChecked();
+      expect(screen.getByText("1 selected")).toBeInTheDocument();
+    });
+
+    it("does not open the preview while selecting", async () => {
+      const onView = vi.fn();
+      render(
+        <History
+          items={[{ ...mockItems[1], mimeType: "image/gif" }]}
+          onView={onView}
+        />
+      );
+
+      await enterSelection();
+      await userEvent.click(screen.getByText("output.gif"));
+
+      expect(onView).not.toHaveBeenCalled();
+      expect(screen.queryByRole("button", { name: /preview file/i })).not.toBeInTheDocument();
+    });
+
+    it("selects every visible item and toggles back", async () => {
+      render(<History items={mockItems} />);
+
+      await enterSelection();
+      await userEvent.click(screen.getByRole("button", { name: "Select all" }));
+
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+      for (const checkbox of screen.getAllByRole("checkbox")) {
+        expect(checkbox).toBeChecked();
+      }
+
+      await userEvent.click(screen.getByRole("button", { name: "Deselect all" }));
+      expect(screen.getByText("0 selected")).toBeInTheDocument();
+    });
+
+    it("leaves selection mode when the filter tab changes", async () => {
+      render(<History items={mockItems} />);
+
+      await enterSelection();
+      await userEvent.click(screen.getByRole("button", { name: "Select all" }));
+      await userEvent.click(screen.getByRole("button", { name: "Generated" }));
+
+      expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+      expect(screen.getByRole("button", { name: "Select items" })).toBeInTheDocument();
+    });
+
+    it("leaves selection mode with the cancel button", async () => {
+      render(<History items={mockItems} />);
+
+      await enterSelection();
+      await userEvent.click(screen.getByRole("button", { name: "Cancel selection" }));
+
+      expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    });
+
+    it("deletes every selected entry after a single confirmation", async () => {
+      const onDelete = vi.fn();
+      const onDeleteIncomplete = vi.fn();
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+      const incomplete = {
+        sessionId: "incomplete-1",
+        filename: "partial.bin",
+        received: 3,
+        total: 10,
+        date: "2026-03-29",
+      };
+
+      render(
+        <History
+          items={mockItems}
+          incompleteItems={[incomplete]}
+          onDelete={onDelete}
+          onDeleteIncomplete={onDeleteIncomplete}
+        />
+      );
+
+      await enterSelection();
+      await userEvent.click(screen.getByRole("button", { name: "Select all" }));
+      await userEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+
+      expect(confirmSpy).toHaveBeenCalledTimes(1);
+      expect(confirmSpy).toHaveBeenCalledWith("Delete 3 items? This cannot be undone.");
+      expect(onDelete).toHaveBeenCalledTimes(2);
+      expect(onDeleteIncomplete).toHaveBeenCalledWith(incomplete);
+      expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+      confirmSpy.mockRestore();
+    });
+
+    it("keeps everything when the bulk delete is cancelled", async () => {
+      const onDelete = vi.fn();
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+      render(<History items={mockItems} onDelete={onDelete} />);
+
+      await enterSelection();
+      await userEvent.click(screen.getByRole("button", { name: "Select all" }));
+      await userEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+
+      expect(onDelete).not.toHaveBeenCalled();
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+      confirmSpy.mockRestore();
+    });
+
+    it("downloads several items as one archive", async () => {
+      const onDownload = vi.fn();
+      const onDownloadMany = vi.fn();
+
+      render(
+        <History items={mockItems} onDownload={onDownload} onDownloadMany={onDownloadMany} />
+      );
+
+      await enterSelection();
+      await userEvent.click(screen.getByRole("button", { name: "Select all" }));
+      await userEvent.click(screen.getByRole("button", { name: "Download selected" }));
+
+      expect(onDownloadMany).toHaveBeenCalledTimes(1);
+      expect(onDownloadMany.mock.calls[0][0].map((item: { id: string }) => item.id).sort()).toEqual([
+        "1",
+        "2",
+      ]);
+      expect(onDownload).not.toHaveBeenCalled();
+    });
+
+    it("downloads a single selected item directly", async () => {
+      const onDownload = vi.fn();
+      const onDownloadMany = vi.fn();
+
+      render(
+        <History items={mockItems} onDownload={onDownload} onDownloadMany={onDownloadMany} />
+      );
+
+      await enterSelection();
+      await userEvent.click(screen.getByText("test.txt"));
+      await userEvent.click(screen.getByRole("button", { name: "Download selected" }));
+
+      expect(onDownload).toHaveBeenCalledWith(mockItems[0]);
+      expect(onDownloadMany).not.toHaveBeenCalled();
+    });
+
+    it("disables the bulk actions while nothing is selected", async () => {
+      render(<History items={mockItems} onDelete={vi.fn()} onDownload={vi.fn()} />);
+
+      await enterSelection();
+
+      expect(screen.getByRole("button", { name: "Delete selected" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Download selected" })).toBeDisabled();
+    });
+
+    it("only offers sync and keep-local when a selected item supports it", async () => {
+      const onSyncItem = vi.fn();
+      const onKeepLocal = vi.fn();
+
+      render(
+        <History
+          items={syncableItems}
+          onSyncItem={onSyncItem}
+          onKeepLocal={onKeepLocal}
+        />
+      );
+
+      await enterSelection();
+      expect(screen.queryByRole("button", { name: "Sync selected" })).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByText("test.txt"));
+      expect(screen.queryByRole("button", { name: "Keep selected local only" })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Sync selected" }));
+      expect(onSyncItem).toHaveBeenCalledWith(syncableItems[0]);
+
+      await enterSelection();
+      await userEvent.click(screen.getByText("output.gif"));
+      await userEvent.click(screen.getByRole("button", { name: "Keep selected local only" }));
+      expect(onKeepLocal).toHaveBeenCalledWith(syncableItems[1]);
+    });
+  });
 });

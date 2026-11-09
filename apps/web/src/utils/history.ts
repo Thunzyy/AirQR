@@ -327,6 +327,55 @@ export function getVersionedHistoryTitle(
   return `${baseName} (${maxVersion + 1})${extension}`;
 }
 
+export const resolveHistoryDownloadFilename = (
+  title: string,
+  mimeType?: string
+): string => {
+  if (mimeType === 'image/gif' && !title.endsWith('.gif')) {
+    return `${title}.gif`;
+  }
+  if (mimeType === 'application/zip') {
+    return toZipFilename(title);
+  }
+  if (mimeType === 'text/plain' && !title.includes('.')) {
+    return `${title}.txt`;
+  }
+  return title;
+};
+
+const padTwoDigits = (value: number): string => String(value).padStart(2, '0');
+
+export const formatBulkDownloadArchiveName = (now: Date): string =>
+  `airqr-history-${now.getFullYear()}${padTwoDigits(now.getMonth() + 1)}${padTwoDigits(
+    now.getDate()
+  )}-${padTwoDigits(now.getHours())}${padTwoDigits(now.getMinutes())}.zip`;
+
+export interface BulkDownloadArchiveSource {
+  title: string;
+  mimeType?: string;
+  data: Uint8Array;
+}
+
+export const buildBulkDownloadArchiveEntries = (sources: BulkDownloadArchiveSource[]) => {
+  // No prototype, so a title like "__proto__" stays a plain entry.
+  const entries: Record<string, Uint8Array> = Object.create(null);
+  const usedNames: Array<Pick<HistoryItem, 'title'>> = [];
+
+  for (const source of sources) {
+    // Archive entries must stay flat: drop any folder part of the title.
+    const lastSegment = source.title.split(/[\\/]/).pop()?.trim() ?? '';
+    const baseName = lastSegment === '' || /^\.+$/.test(lastSegment) ? 'file' : lastSegment;
+    const name = getVersionedHistoryTitle(
+      usedNames,
+      resolveHistoryDownloadFilename(baseName, source.mimeType)
+    );
+    usedNames.push({ title: name });
+    entries[name] = source.data;
+  }
+
+  return entries;
+};
+
 const parseTimestamp = (value: WireValue | undefined): number => {
   if (isWireNumber(value)) {
     return value;
