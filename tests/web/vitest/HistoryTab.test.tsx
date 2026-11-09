@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { unzipSync } from "fflate";
 
 import HistoryTab from "@web/components/tabs/HistoryTab";
 import { resetServerAuthStatusCache } from "@web/services/serverAuth";
@@ -91,6 +92,26 @@ vi.mock("@web/features/history/History", () => ({
     return <div data-testid="history-tab-stub" />;
   },
 }));
+
+// The global Worker stub never answers, so zip on the main thread instead,
+// but still detach transferred buffers the way postMessage would.
+vi.mock("@web/utils/zipWorker", async (importOriginal) => {
+  const { zipSync } = await import("fflate");
+  return {
+    ...(await importOriginal<typeof import("@web/utils/zipWorker")>()),
+    zipFilesInWorker: async (
+      files: Record<string, Uint8Array>,
+      _options?: unknown,
+      transfer = true
+    ) => {
+      const archive = zipSync(files, { level: 0 });
+      if (transfer) {
+        structuredClone(null, { transfer: Object.values(files).map((file) => file.buffer) });
+      }
+      return archive;
+    },
+  };
+});
 
 vi.mock("@web/components/media/GifPlayer", () => ({
   default: () => <div data-testid="history-preview-gif-player" />,
@@ -587,6 +608,74 @@ describe("HistoryTab", () => {
         ])
       );
     });
+  });
+
+  it("downloads several history items as a single zip archive", async () => {
+    const makeItem = (id: string, title: string, bytes: number[]) => ({
+      id,
+      origin: "generated" as const,
+      type: "file" as const,
+      title,
+      subtitle: "2026-03-29 - 22:29 - 3 B",
+      date: "2026-03-29",
+      mimeType: "image/gif",
+      size: bytes.length,
+      source: "local" as const,
+      fileData: new Uint8Array(bytes),
+    });
+    const items = [makeItem("bulk-1", "clip.gif", [1, 2]), makeItem("bulk-2", "clip.gif", [3])];
+
+    useHistoryStore.setState({
+      ...useHistoryStore.getState(),
+      items,
+      incompleteItems: [],
+    });
+
+    const createdBlobs: Blob[] = [];
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      createdBlobs.push(blob);
+      return "blob:bulk-zip";
+    });
+    URL.revokeObjectURL = vi.fn();
+    const downloadedNames: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      downloadedNames.push(this.download);
+    });
+
+    try {
+      render(<HistoryTab />);
+
+      await waitFor(() => {
+        expect(
+          (getHistoryProps() as { onDownloadMany?: unknown } | undefined)?.onDownloadMany
+        ).toBeTypeOf("function");
+      });
+
+      await act(async () => {
+        await (
+          getHistoryProps() as { onDownloadMany: (items: unknown[]) => Promise<void> }
+        ).onDownloadMany(items);
+      });
+
+      expect(downloadedNames).toHaveLength(1);
+      expect(downloadedNames[0]).toMatch(/^airqr-history-\d{8}-\d{4}\.zip$/);
+      expect(createdBlobs).toHaveLength(1);
+
+      const archive = unzipSync(new Uint8Array(await createdBlobs[0].arrayBuffer()));
+      expect(Object.keys(archive)).toEqual(["clip.gif", "clip (2).gif"]);
+      expect(Array.from(archive["clip (2).gif"])).toEqual([3]);
+      // The history entries must keep their bytes after being zipped.
+      expect(Array.from(items[0].fileData)).toEqual([1, 2]);
+      expect(Array.from(items[1].fileData)).toEqual([3]);
+    } finally {
+      URL.createObjectURL = originalCreateObjectURL;
+      // The download revokes its URL on a delay; leave the stub so that timer stays harmless.
+      void originalRevokeObjectURL;
+    }
   });
 
   it("renders the history preview as a modal dialog and closes it on Escape", async () => {

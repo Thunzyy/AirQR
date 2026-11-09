@@ -9,14 +9,18 @@ import History from '../../features/history/History';
 import QrGifViewer from '../media/QrGifViewer';
 import { useHistoryStore, useSettingsStore, useToastStore } from '../../store';
 import {
+  buildBulkDownloadArchiveEntries,
+  formatBulkDownloadArchiveName,
   normalizeHistoryItem,
+  resolveHistoryDownloadFilename,
   resolveHistoryPreviewKind,
   resolveHistoryItemSortTimestamp,
   toZipFilename,
+  type BulkDownloadArchiveSource,
 } from '../../utils/history';
 import { asWireObject, asWireString, type WireValue } from '../../parse/wire';
 import { formatDateCategory, formatSize, formatScanDisplayName } from '../../utils/format';
-import { unzipFilesInWorker } from '../../utils/zipWorker';
+import { unzipFilesInWorker, zipFilesInWorker } from '../../utils/zipWorker';
 import Icon from '../ui/Icon';
 import NoteCodeViewer from '../note/NoteCodeViewer';
 import type {
@@ -1218,6 +1222,18 @@ const HistoryTab: React.FC = () => {
     return stored ? normalizeHistoryItem(stored) : null;
   };
 
+  const triggerBlobDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    // Revoking right after click can cancel large downloads in Safari/Firefox.
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  };
+
   const handleDownload = async (item: HistoryItem) => {
     const resolved = await resolveHistoryItemData(item);
     if (!resolved?.fileData) {
@@ -1226,23 +1242,57 @@ const HistoryTab: React.FC = () => {
     }
 
     const mimeType = resolved.mimeType || 'application/octet-stream';
-    const blob = toBinaryBlob(resolved.fileData, mimeType);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    triggerBlobDownload(
+      toBinaryBlob(resolved.fileData, mimeType),
+      resolveHistoryDownloadFilename(resolved.title, mimeType)
+    );
+  };
 
-      let filename = resolved.title;
-      if (mimeType === 'image/gif' && !filename.endsWith('.gif')) {
-        filename += '.gif';
-      } else if (mimeType === 'application/zip') {
-        filename = toZipFilename(filename);
-      } else if (mimeType === 'text/plain' && !filename.includes('.')) {
-        filename += '.txt';
+  const handleDownloadMany = async (items: HistoryItem[]) => {
+    // Resolve one at a time so server-backed items don't all fetch at once.
+    const sources: BulkDownloadArchiveSource[] = [];
+    let failedCount = 0;
+    for (const item of items) {
+      const resolved = await resolveHistoryItemData(item);
+      if (!resolved?.fileData) {
+        failedCount++;
+        continue;
       }
+      sources.push({
+        title: resolved.title,
+        mimeType: resolved.mimeType,
+        data: await toUint8Array(resolved.fileData),
+      });
+    }
 
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+    if (failedCount > 0) {
+      logger.warn('Some history items could not be added to the bulk download', {
+        failedCount,
+      });
+      showToast(t('history.bulkDownloadFailed', { count: failedCount }), 'warning');
+    }
+    if (sources.length === 0) {
+      return;
+    }
+
+    try {
+      // No transfer: some sources are the stored items' own bytes, which a
+      // transfer to the worker would empty.
+      const archive = await zipFilesInWorker(
+        buildBulkDownloadArchiveEntries(sources),
+        { level: 0 },
+        false
+      );
+      triggerBlobDownload(
+        toBinaryBlob(archive, 'application/zip'),
+        formatBulkDownloadArchiveName(new Date())
+      );
+    } catch (error) {
+      logger.error('Failed to build bulk history download', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      showToast(t('errors.error'), 'error');
+    }
   };
 
   const openMultiChunkView = async () => {
@@ -2282,6 +2332,7 @@ const HistoryTab: React.FC = () => {
         incompleteItems={displayIncompleteItems}
         onDelete={handleDelete}
         onDownload={handleDownload}
+        onDownloadMany={handleDownloadMany}
         onResume={handleResume}
         onDeleteIncomplete={handleDeleteIncomplete}
         onSyncIncomplete={handleSyncIncomplete}

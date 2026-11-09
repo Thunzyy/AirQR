@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { buildNoteFilename } from "@web/utils/noteDetection";
 import {
+  buildBulkDownloadArchiveEntries,
   createHistoryItem,
+  formatBulkDownloadArchiveName,
   getVersionedHistoryTitle,
   normalizeHistoryItem,
+  resolveHistoryDownloadFilename,
 } from "@web/utils/history";
 
 describe("history utils", () => {
@@ -98,5 +101,54 @@ describe("history utils", () => {
     );
 
     expect(title).toBe("note (3).md");
+  });
+
+  it("adds the missing extension a downloaded history file needs", () => {
+    expect(resolveHistoryDownloadFilename("capture", "image/gif")).toBe("capture.gif");
+    expect(resolveHistoryDownloadFilename("bundle.tar", "application/zip")).toBe("bundle.zip");
+    expect(resolveHistoryDownloadFilename("note", "text/plain")).toBe("note.txt");
+    expect(resolveHistoryDownloadFilename("report.pdf", "application/pdf")).toBe("report.pdf");
+  });
+
+  it("names the bulk download archive after the local date and time", () => {
+    expect(formatBulkDownloadArchiveName(new Date(2026, 10, 9, 7, 5))).toBe(
+      "airqr-history-20261109-0705.zip"
+    );
+  });
+
+  it("builds archive entries with unique file names", () => {
+    const entries = buildBulkDownloadArchiveEntries([
+      { title: "photo", mimeType: "image/gif", data: new Uint8Array([1]) },
+      { title: "photo.gif", mimeType: "image/gif", data: new Uint8Array([2]) },
+      { title: "photo.gif", mimeType: "image/gif", data: new Uint8Array([3]) },
+      { title: "notes", mimeType: "text/plain", data: new Uint8Array([4]) },
+    ]);
+
+    expect(Object.keys(entries)).toEqual([
+      "photo.gif",
+      "photo (2).gif",
+      "photo (3).gif",
+      "notes.txt",
+    ]);
+    expect(Array.from(entries["photo (3).gif"])).toEqual([3]);
+    expect(entries["notes.txt"]).toBeInstanceOf(Uint8Array);
+  });
+
+  it("strips folder separators from archive entry names", () => {
+    const entries = buildBulkDownloadArchiveEntries([
+      { title: "../evil/name.txt", mimeType: "text/plain", data: new Uint8Array([1]) },
+    ]);
+
+    expect(Object.keys(entries)).toEqual(["name.txt"]);
+  });
+
+  it("keeps dot-only and prototype-like titles as ordinary archive entries", () => {
+    const entries = buildBulkDownloadArchiveEntries([
+      { title: "x/..", data: new Uint8Array([1]) },
+      { title: "__proto__", data: new Uint8Array([2]) },
+    ]);
+
+    expect(Object.keys(entries)).toEqual(["file", "__proto__"]);
+    expect(Array.from(entries["__proto__"])).toEqual([2]);
   });
 });
