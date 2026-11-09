@@ -1,3 +1,5 @@
+import 'dart:ui' show CheckedState, SemanticsAction;
+
 import 'package:airqr_mobile/airqr_icon.dart';
 import 'package:airqr_mobile/airqr_theme.dart';
 import 'package:airqr_mobile/history_item.dart';
@@ -306,10 +308,13 @@ void main() {
         ),
       );
 
-      final checkbox = tester.widget<Checkbox>(find.byType(Checkbox));
-      expect(checkbox.value, isTrue);
+      final checkbox = tester.widget<HistorySelectionCheckbox>(
+        find.byType(HistorySelectionCheckbox),
+      );
+      expect(checkbox.selected, isTrue);
+      expect(find.byType(Checkbox), findsNothing);
       expect(
-        tester.getTopLeft(find.byType(Checkbox)).dx,
+        tester.getTopLeft(find.byType(HistorySelectionCheckbox)).dx,
         lessThan(tester.getTopLeft(find.text('missing-selection.txt')).dx),
       );
       expect(find.byType(HistoryActionButton), findsNothing);
@@ -319,7 +324,7 @@ void main() {
       await tester.pump();
       expect(toggles, 1);
 
-      await tester.tap(find.byType(Checkbox));
+      await tester.tap(find.byType(HistorySelectionCheckbox));
       await tester.pump();
       expect(toggles, 2);
       expect(saves, 0);
@@ -347,7 +352,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(Checkbox), findsNothing);
+      expect(find.byType(HistorySelectionCheckbox), findsNothing);
       expect(find.byType(Dismissible), findsOneWidget);
       await tester.longPress(find.text('missing-long-press.txt'));
       await tester.pump();
@@ -379,7 +384,14 @@ void main() {
         ),
       );
 
-      expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
+      expect(
+        tester
+            .widget<HistorySelectionCheckbox>(
+              find.byType(HistorySelectionCheckbox),
+            )
+            .selected,
+        isFalse,
+      );
       expect(find.byType(HistoryActionButton), findsNothing);
       expect(find.byType(Dismissible), findsNothing);
 
@@ -414,6 +426,227 @@ void main() {
       await tester.pump();
       expect(longPresses, 1);
       expect(resumes, 0);
+    });
+  });
+
+  group('HistorySelectionCheckbox', () {
+    Future<void> pumpCheckbox(
+      WidgetTester tester, {
+      required bool selected,
+      VoidCallback? onChanged,
+      bool disableAnimations = false,
+      Brightness brightness = Brightness.light,
+    }) {
+      return tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(brightness: brightness),
+          home: MediaQuery(
+            data: MediaQueryData(disableAnimations: disableAnimations),
+            child: Scaffold(
+              body: Center(
+                child: HistorySelectionCheckbox(
+                  selected: selected,
+                  semanticLabel: 'note.txt',
+                  onChanged: onChanged ?? () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    BoxDecoration circleDecoration(WidgetTester tester) =>
+        tester
+                .widget<AnimatedContainer>(
+                  find.descendant(
+                    of: find.byType(HistorySelectionCheckbox),
+                    matching: find.byType(AnimatedContainer),
+                  ),
+                )
+                .decoration!
+            as BoxDecoration;
+
+    testWidgets('unchecked is a 24dp hollow circle with a 44dp target', (
+      tester,
+    ) async {
+      await pumpCheckbox(tester, selected: false);
+      final context = tester.element(find.byType(HistorySelectionCheckbox));
+
+      expect(find.byType(Checkbox), findsNothing);
+      final target = tester.getSize(find.byType(HistorySelectionCheckbox));
+      expect(target.width, greaterThanOrEqualTo(44));
+      expect(target.height, greaterThanOrEqualTo(44));
+      expect(
+        tester.getSize(
+          find.descendant(
+            of: find.byType(HistorySelectionCheckbox),
+            matching: find.byType(AnimatedContainer),
+          ),
+        ),
+        const Size.square(24),
+      );
+      final decoration = circleDecoration(tester);
+      expect(decoration.shape, BoxShape.circle);
+      expect(decoration.color, Colors.transparent);
+      expect(
+        decoration.border,
+        Border.all(color: AirQrTheme.textMuted(context), width: 2),
+      );
+      expect(
+        tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity,
+        0,
+      );
+      expect(
+        tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale,
+        0.5,
+      );
+    });
+
+    for (final brightness in Brightness.values) {
+      testWidgets('checked fills with accent text and a card-colored check '
+          '(${brightness.name})', (tester) async {
+        await pumpCheckbox(tester, selected: true, brightness: brightness);
+        final context = tester.element(find.byType(HistorySelectionCheckbox));
+        final accent = AirQrTheme.accentText(context);
+        expect(
+          accent,
+          brightness == Brightness.dark
+              ? const Color(0xFF9BA8FF)
+              : const Color(0xFF334CFF),
+        );
+
+        final decoration = circleDecoration(tester);
+        expect(decoration.color, accent);
+        expect(decoration.border, Border.all(color: accent, width: 2));
+        final check = tester.widget<AirQrIcon>(
+          find.descendant(
+            of: find.byType(HistorySelectionCheckbox),
+            matching: find.byType(AirQrIcon),
+          ),
+        );
+        expect(check.name, 'check');
+        expect(check.size, 14);
+        expect(check.color, AirQrTheme.card(context));
+        expect(
+          tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity,
+          1,
+        );
+        expect(
+          tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale,
+          1,
+        );
+      });
+    }
+
+    testWidgets('check animates over 150ms and honors reduced motion', (
+      tester,
+    ) async {
+      await pumpCheckbox(tester, selected: true);
+      expect(
+        tester.widget<AnimatedScale>(find.byType(AnimatedScale)).duration,
+        const Duration(milliseconds: 150),
+      );
+      expect(
+        tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).duration,
+        const Duration(milliseconds: 150),
+      );
+
+      await pumpCheckbox(tester, selected: true, disableAnimations: true);
+      expect(
+        tester.widget<AnimatedScale>(find.byType(AnimatedScale)).duration,
+        Duration.zero,
+      );
+      expect(
+        tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).duration,
+        Duration.zero,
+      );
+    });
+
+    testWidgets('exposes checked state, file name and tap to semantics', (
+      tester,
+    ) async {
+      var taps = 0;
+      await pumpCheckbox(tester, selected: true, onChanged: () => taps++);
+      final node = tester.getSemantics(find.bySemanticsLabel('note.txt'));
+      expect(node.flagsCollection.isChecked, CheckedState.isTrue);
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+
+      await tester.tap(find.byType(HistorySelectionCheckbox));
+      await tester.pump();
+      expect(taps, 1);
+    });
+  });
+
+  group('selected outline', () {
+    testWidgets('incomplete card outline paints above content, unclipped', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          IncompleteHistoryCard(
+            scan: _scan('scan-outline'),
+            cardColor: AirQrTheme.darkCard,
+            warningColor: AirQrTheme.progressOrange,
+            displayName: 'Partial scan',
+            packetsSummary: '1/4 packets',
+            formattedDate: 'Today',
+            selectionMode: true,
+            selected: true,
+            onToggleSelected: () {},
+            onResume: () {},
+            onDelete: () {},
+          ),
+        ),
+      );
+      final cardFinder = find.byKey(
+        const ValueKey('history_incomplete_card_scan-outline'),
+      );
+      _expectOutlineOnTop(tester, cardFinder);
+      // The progress bar is inside the card, below the outline layer.
+      expect(
+        find.descendant(
+          of: cardFinder,
+          matching: find.byType(LinearProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('completed card outline paints above content, unclipped', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          CompletedHistoryCard(
+            item: _item('missing-outline.txt'),
+            cardColor: AirQrTheme.darkCard,
+            successColor: Colors.green,
+            subtitle: 'Today',
+            selectionMode: true,
+            selected: true,
+            onToggleSelected: () {},
+            onView: null,
+            onKeepLocal: null,
+            onSync: null,
+            onSave: () {},
+            onDelete: () {},
+            onDismissed: () {},
+          ),
+        ),
+      );
+      _expectOutlineOnTop(
+        tester,
+        find
+            .ancestor(
+              of: find.text('missing-outline.txt'),
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is Container && widget.foregroundDecoration != null,
+              ),
+            )
+            .first,
+      );
     });
   });
 
@@ -619,6 +852,37 @@ HistorySearchToolbar _toolbar({VoidCallback? onEnterSelection}) =>
       cardColor: AirQrTheme.darkCard,
       primaryColor: AirQrTheme.accentBlue,
     );
+
+void _expectOutlineOnTop(WidgetTester tester, Finder cardFinder) {
+  final card = tester.widget<Container>(cardFinder);
+  // foregroundDecoration paints after (above) every child of the card,
+  // including the progress bar.
+  final outline = card.foregroundDecoration! as BoxDecoration;
+  expect(outline.border, Border.all(color: AirQrTheme.accentBlue, width: 2));
+  expect(outline.borderRadius, BorderRadius.circular(28));
+  expect(
+    (card.decoration! as BoxDecoration).borderRadius,
+    outline.borderRadius,
+  );
+  // Nothing inside the card widget wraps (and so clips) the outlined box.
+  final cardWidget = find.byWidgetPredicate(
+    (widget) =>
+        widget is IncompleteHistoryCard || widget is CompletedHistoryCard,
+  );
+  expect(
+    find.ancestor(
+      of: cardFinder,
+      matching: find.descendant(
+        of: cardWidget,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is ClipRRect || widget is ClipRect || widget is ClipPath,
+        ),
+      ),
+    ),
+    findsNothing,
+  );
+}
 
 HistoryItem _item(String path) =>
     HistoryItem(path: path, timestamp: 1, size: 1, origin: 'scanned');
