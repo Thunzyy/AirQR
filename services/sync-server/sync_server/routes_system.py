@@ -5,6 +5,7 @@ from http import HTTPStatus
 from typing import TYPE_CHECKING, Any
 
 from .auth import client_ip_from_peer
+from .retention import resolve_history_retention, validate_retention_settings
 from .version import get_version_info
 
 if TYPE_CHECKING:
@@ -205,11 +206,20 @@ def handle_export_config_post(handler: "SyncRequestHandler") -> None:
         )
 
 
+def _retention_effective(handler: "SyncRequestHandler", settings: dict[str, Any]) -> dict[str, Any]:
+    default_days = handler.context.retention_history_default_days
+    days, source = resolve_history_retention(settings, default_days=default_days)
+    return {"historyDays": days, "source": source, "defaultHistoryDays": default_days}
+
+
 def handle_settings_get(handler: "SyncRequestHandler") -> None:
     if not handler._require_auth():
         return
     settings = handler.context.settings_store.load()
-    handler._send_json(HTTPStatus.OK, settings)
+    handler._send_json(
+        HTTPStatus.OK,
+        {**settings, "retentionEffective": _retention_effective(handler, settings)},
+    )
 
 
 def handle_settings_post(handler: "SyncRequestHandler") -> None:
@@ -222,8 +232,22 @@ def handle_settings_post(handler: "SyncRequestHandler") -> None:
     if not isinstance(payload, dict):
         handler._send_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid JSON object"})
         return
+    # Computed on read; never persist it back.
+    payload.pop("retentionEffective", None)
+    if "retention" in payload:
+        retention_error = validate_retention_settings(payload["retention"])
+        if retention_error:
+            handler._send_json(HTTPStatus.BAD_REQUEST, {"error": retention_error})
+            return
     settings = handler.context.settings_store.merge(payload)
-    handler._send_json(HTTPStatus.OK, {"ok": True, "settings": settings})
+    handler._send_json(
+        HTTPStatus.OK,
+        {
+            "ok": True,
+            "settings": settings,
+            "retentionEffective": _retention_effective(handler, settings),
+        },
+    )
 
 
 def handle_auth_status(handler: "SyncRequestHandler") -> None:

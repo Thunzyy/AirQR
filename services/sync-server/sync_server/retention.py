@@ -21,16 +21,58 @@ class RetentionSweepResult:
     deleted_history_items: int = 0
 
 
+HISTORY_RETENTION_MIN_DAYS = 1
+HISTORY_RETENTION_MAX_DAYS = 3650
+
+
+def _is_valid_history_days(value: Any) -> bool:
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and HISTORY_RETENTION_MIN_DAYS <= value <= HISTORY_RETENTION_MAX_DAYS
+    )
+
+
+def validate_retention_settings(value: Any) -> Optional[str]:
+    """Return an error message for an invalid `retention` settings block."""
+    if not isinstance(value, dict) or set(value) != {"historyDays"}:
+        return "retention must be an object with only historyDays"
+    days = value["historyDays"]
+    if days is None or _is_valid_history_days(days):
+        return None
+    return (
+        "retention.historyDays must be null (never delete) or an integer "
+        f"between {HISTORY_RETENTION_MIN_DAYS} and {HISTORY_RETENTION_MAX_DAYS}"
+    )
+
+
+def resolve_history_retention(
+    settings: dict[str, Any], *, default_days: Optional[int]
+) -> tuple[Optional[int], str]:
+    """Return (days or None for never, source) for the history retention.
+
+    A valid saved setting wins over the server flag. A flag of 0 or less means
+    "never delete" instead of wiping every entry.
+    """
+    retention = settings.get("retention")
+    if isinstance(retention, dict) and "historyDays" in retention:
+        days = retention["historyDays"]
+        if days is None or _is_valid_history_days(days):
+            return days, "settings"
+    if default_days is None or default_days <= 0:
+        return None, "server-default"
+    return default_days, "server-default"
+
+
 def apply_retention(
     storage: RetentionStorage,
     *,
     retention_incomplete_days: int,
-    retention_history_days: int,
+    retention_history_days: Optional[int],
     now: Optional[datetime] = None,
 ) -> RetentionSweepResult:
     current_time = now or datetime.now(timezone.utc)
     incomplete_cutoff = current_time - timedelta(days=max(retention_incomplete_days, 0))
-    history_cutoff = current_time - timedelta(days=max(retention_history_days, 0))
 
     deleted_incomplete_sessions = 0
     for session in storage.list_sessions():
@@ -46,6 +88,13 @@ def apply_retention(
             deleted_incomplete_sessions += 1
 
     deleted_history_items = 0
+    if retention_history_days is None:
+        return RetentionSweepResult(
+            deleted_incomplete_sessions=deleted_incomplete_sessions,
+            deleted_history_items=0,
+        )
+
+    history_cutoff = current_time - timedelta(days=max(retention_history_days, 0))
     for item in storage.list_history_items():
         history_id = _history_id(item)
         if not history_id:

@@ -115,3 +115,56 @@ def test_apply_retention_prefers_updated_at_over_created_at() -> None:
     )
     assert storage.deleted_sessions == []
     assert storage.deleted_history_items == []
+
+
+def test_apply_retention_keeps_all_history_when_history_retention_is_disabled() -> None:
+    now = datetime(2026, 11, 9, tzinfo=timezone.utc)
+    storage = _FakeStorage(
+        sessions=[],
+        history_items=[{"historyId": "history-ancient", "updatedAt": _iso_at(now, days_ago=400)}],
+    )
+
+    result = apply_retention(
+        storage,
+        retention_incomplete_days=14,
+        retention_history_days=None,
+        now=now,
+    )
+
+    assert storage.deleted_history_items == []
+    assert result == RetentionSweepResult(deleted_incomplete_sessions=0, deleted_history_items=0)
+
+
+def test_resolve_history_retention_prefers_the_saved_setting() -> None:
+    from sync_server.retention import resolve_history_retention
+
+    assert resolve_history_retention({"retention": {"historyDays": 45}}, default_days=90) == (45, "settings")
+    assert resolve_history_retention({"retention": {"historyDays": None}}, default_days=90) == (None, "settings")
+
+
+def test_resolve_history_retention_falls_back_to_the_server_default() -> None:
+    from sync_server.retention import resolve_history_retention
+
+    assert resolve_history_retention({}, default_days=90) == (90, "server-default")
+    assert resolve_history_retention({"retention": {}}, default_days=90) == (90, "server-default")
+    # 0 used to wipe every entry; it now means "never delete".
+    assert resolve_history_retention({}, default_days=0) == (None, "server-default")
+    # A corrupt saved value must not delete anything unexpected.
+    assert resolve_history_retention({"retention": {"historyDays": "7"}}, default_days=90) == (90, "server-default")
+
+
+def test_validate_retention_settings_accepts_days_or_never() -> None:
+    from sync_server.retention import validate_retention_settings
+
+    assert validate_retention_settings({"historyDays": 1}) is None
+    assert validate_retention_settings({"historyDays": 3650}) is None
+    assert validate_retention_settings({"historyDays": None}) is None
+
+
+def test_validate_retention_settings_rejects_out_of_range_values() -> None:
+    from sync_server.retention import validate_retention_settings
+
+    for invalid in ({"historyDays": 0}, {"historyDays": 3651}, {"historyDays": -5},
+                    {"historyDays": 1.5}, {"historyDays": True}, {"historyDays": "30"},
+                    {}, {"historyDays": 30, "other": 1}, "30", None):
+        assert validate_retention_settings(invalid) is not None, invalid

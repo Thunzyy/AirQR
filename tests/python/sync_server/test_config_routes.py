@@ -20,6 +20,7 @@ def _make_handler(tmp_path: Path) -> MagicMock:
     handler.context.auth = AuthManager(users_file)
     handler.context.export_manager = ExportManager(tmp_path / "export_config.json", None)
     handler.context.settings_store = SettingsStore(tmp_path / "settings.json")
+    handler.context.retention_history_default_days = 90
     handler._send_json = MagicMock()
     handler._read_json = MagicMock()
     handler._require_auth = MagicMock(return_value=True)
@@ -108,6 +109,11 @@ def test_handle_settings_get_returns_current_settings(tmp_path: Path) -> None:
         {
             "theme": "dark",
             "encoder": {"fps": 24},
+            "retentionEffective": {
+                "historyDays": 90,
+                "source": "server-default",
+                "defaultHistoryDays": 90,
+            },
         },
     )
 
@@ -138,7 +144,55 @@ def test_handle_settings_post_merges_settings(tmp_path: Path) -> None:
             "encoder": {"fps": 30, "packetSize": 256},
             "scanner": {"tryHarder": True},
         },
+        "retentionEffective": {
+            "historyDays": 90,
+            "source": "server-default",
+            "defaultHistoryDays": 90,
+        },
     }
+
+
+def test_handle_settings_get_reports_effective_history_retention(tmp_path: Path) -> None:
+    handler = _make_handler(tmp_path)
+    handler.context.retention_history_default_days = 90
+
+    SyncRequestHandler._handle_settings_get(handler)
+
+    status, payload = handler._send_json.call_args.args
+    assert status == HTTPStatus.OK
+    assert payload["retentionEffective"] == {
+        "historyDays": 90,
+        "source": "server-default",
+        "defaultHistoryDays": 90,
+    }
+
+
+def test_handle_settings_post_saves_never_delete_retention(tmp_path: Path) -> None:
+    handler = _make_handler(tmp_path)
+    handler.context.retention_history_default_days = 90
+    handler._read_json.return_value = {"retention": {"historyDays": None}}
+
+    SyncRequestHandler._handle_settings_post(handler)
+
+    status, payload = handler._send_json.call_args.args
+    assert status == HTTPStatus.OK
+    assert payload["settings"]["retention"] == {"historyDays": None}
+    assert payload["retentionEffective"]["historyDays"] is None
+    assert payload["retentionEffective"]["source"] == "settings"
+    assert handler.context.settings_store.load()["retention"] == {"historyDays": None}
+
+
+def test_handle_settings_post_rejects_invalid_retention(tmp_path: Path) -> None:
+    handler = _make_handler(tmp_path)
+    handler.context.retention_history_default_days = 90
+    handler._read_json.return_value = {"retention": {"historyDays": 0}}
+
+    SyncRequestHandler._handle_settings_post(handler)
+
+    status, payload = handler._send_json.call_args.args
+    assert status == HTTPStatus.BAD_REQUEST
+    assert "retention" in payload["error"].lower()
+    assert handler.context.settings_store.load() == {}
 
 
 def test_handle_auth_credentials_post_rejects_first_user_over_http(tmp_path: Path) -> None:
