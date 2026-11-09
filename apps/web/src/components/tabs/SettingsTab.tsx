@@ -20,6 +20,7 @@ const logger = createLogger('ui:settingsTab');
 
 import { Button, Toggle, Icon, HelpTip } from '../ui';
 import HistoryRetentionSetting from '../settings/HistoryRetentionSetting';
+import { useConfirmDialog } from '../ui/useConfirmDialog';
 import { APP_INFO, ECC_OPTIONS, SCANNER_PRESETS } from '../../constants';
 import type { CameraResolution, ECCLevel, LoggingConfig } from '../../types';
 import {
@@ -254,6 +255,7 @@ const ConnectedSegmentedControl: React.FC<{
 
 const SettingsTab: React.FC = () => {
   const { t } = useTranslation();
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [, navigate] = useLocation();
   const syncServerUrlInputId = useId();
   const syncUsernameInputId = useId();
@@ -524,7 +526,13 @@ const SettingsTab: React.FC = () => {
   };
 
   const handleClearData = async () => {
-    if (!window.confirm(t('settings.clearDataConfirm'))) {
+    const confirmed = await confirm({
+      title: t('settings.clearDataTitle'),
+      message: t('settings.clearDataConfirm'),
+      confirmLabel: t('common.clear'),
+      tone: 'danger',
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -677,7 +685,7 @@ const SettingsTab: React.FC = () => {
   );
 
   return (
-    <div className="airqr-screen flex flex-col animate-fade-in"><div className="airqr-content flex flex-col gap-4 px-4 py-4 pb-28">
+    <div className="airqr-screen flex flex-col animate-fade-in">{confirmDialog}<div className="airqr-content flex flex-col gap-4 px-4 py-4 pb-28">
       <div className={`airqr-settings-menu ${selectedSettingsSection === null ? '' : 'hidden'}`}>
         {settingsMenuItems.map((item) => (
           <button

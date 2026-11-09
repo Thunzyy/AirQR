@@ -5,6 +5,7 @@
 import React, { useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Toggle } from '../ui';
+import { useConfirmDialog } from '../ui/useConfirmDialog';
 import type { ScanUploadConfig } from '../../types';
 import {
   HISTORY_RETENTION_MAX_DAYS,
@@ -40,6 +41,7 @@ const HistoryRetentionSetting: React.FC<HistoryRetentionSettingProps> = ({ uploa
   const [daysText, setDaysText] = useState('');
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   const { url, apiKey, username, password } = uploadConfig;
 
@@ -92,7 +94,15 @@ const HistoryRetentionSetting: React.FC<HistoryRetentionSettingProps> = ({ uploa
     // Shorter retention deletes entries that are kept today; ask first.
     const shortens =
       nextDays !== null && (current.historyDays === null || nextDays < current.historyDays);
-    if (shortens && !window.confirm(t('settings.historyRetentionShortenConfirm', { days: nextDays }))) {
+    if (
+      shortens &&
+      !(await confirm({
+        title: t('settings.historyRetentionShortenTitle'),
+        message: t('settings.historyRetentionShortenConfirm', { days: nextDays }),
+        confirmLabel: t('settings.historyRetentionShortenAction'),
+        tone: 'danger',
+      }))
+    ) {
       return;
     }
     setSaving(true);
@@ -185,6 +195,7 @@ const HistoryRetentionSetting: React.FC<HistoryRetentionSettingProps> = ({ uploa
           </span>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 };

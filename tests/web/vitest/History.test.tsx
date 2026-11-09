@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import History from "@web/features/history/History";
 import fr from "@web/i18n/locales/fr";
@@ -643,7 +643,7 @@ describe("History Component", () => {
     it("deletes every selected entry after a single confirmation", async () => {
       const onDelete = vi.fn();
       const onDeleteIncomplete = vi.fn();
-      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+      const nativeConfirm = vi.spyOn(window, "confirm");
       const incomplete = {
         sessionId: "incomplete-1",
         filename: "partial.bin",
@@ -665,27 +665,33 @@ describe("History Component", () => {
       await userEvent.click(screen.getByRole("button", { name: "Select all" }));
       await userEvent.click(screen.getByRole("button", { name: "Delete selected" }));
 
-      expect(confirmSpy).toHaveBeenCalledTimes(1);
-      expect(confirmSpy).toHaveBeenCalledWith("Delete 3 items? This cannot be undone.");
+      const dialog = screen.getByRole("alertdialog", { name: "Delete 3 items?" });
+      expect(dialog).toHaveAccessibleDescription("This cannot be undone.");
+      expect(onDelete).not.toHaveBeenCalled();
+      await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+      expect(nativeConfirm).not.toHaveBeenCalled();
       expect(onDelete).toHaveBeenCalledTimes(2);
       expect(onDeleteIncomplete).toHaveBeenCalledWith(incomplete);
       expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
-      confirmSpy.mockRestore();
+      nativeConfirm.mockRestore();
     });
 
     it("keeps everything when the bulk delete is cancelled", async () => {
       const onDelete = vi.fn();
-      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 
       render(<History items={mockItems} onDelete={onDelete} />);
 
       await enterSelection();
       await userEvent.click(screen.getByRole("button", { name: "Select all" }));
       await userEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+      await userEvent.click(
+        within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancel" })
+      );
 
       expect(onDelete).not.toHaveBeenCalled();
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
       expect(screen.getByText("2 selected")).toBeInTheDocument();
-      confirmSpy.mockRestore();
     });
 
     it("downloads several items as one archive", async () => {
