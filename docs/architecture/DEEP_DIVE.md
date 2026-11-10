@@ -437,7 +437,8 @@ The server also handles:
 
 - bootstrap auth from environment variables
 - session cookie signing
-- retention sweeps for incomplete sessions and old history items
+- retention sweeps for incomplete sessions and old history items, run at startup and then once a day on a daemon thread (`airqr-retention`)
+- history retention resolved at each sweep: a valid `retention.historyDays` saved from the app Settings (`POST /api/config/settings`, `null` = never delete, otherwise 1..3650 days) wins over the `--retention-history` / `retention_history_days` server value; a server value of `0` or less means "never delete"
 - structured startup and runtime logs
 
 This keeps the deployment story manageable without turning the sync server into a hard dependency for core transfers.

@@ -47,7 +47,7 @@ The sync-server now emits two structured startup lines that are useful in real d
 Examples:
 
 ```text
-server.retention deleted_history_items=3 deleted_incomplete_sessions=2 retention_history_days=30 retention_incomplete_days=7
+server.retention deleted_history_items=3 deleted_incomplete_sessions=2 retention_history_days=30 retention_history_source=server-default retention_incomplete_days=7
 server.start allowed_origins=none auth_mode=users-file bind=0.0.0.0:8081 export_dir=null lan_urls=https://airqr.example.com local_url=https://localhost:8081 scheme=https static_dir=/srv/airqr/web storage_backend=sqlite storage_dir=/data/airqr trusted_proxies=1 configured verbose=false ws_mode=shared
 ```
 
@@ -58,6 +58,11 @@ These lines are intended to answer quickly:
 - which storage/auth mode is active
 - whether retention actually ran
 - which local/LAN URL is expected to work
+
+The `server.retention` line is emitted at startup and again after each daily
+retention sweep. `retention_history_days=never` means history items are never
+deleted; `retention_history_source` is `settings` when the value comes from the
+app Settings and `server-default` when it comes from the CLI/config value.
 
 Runtime scan paths now also emit structured `key=value` logs on the main completion / assembly paths, for example:
 
@@ -94,7 +99,7 @@ These are intended to answer quickly:
 | `--tls-key` | - | TLS private key path |
 | `--trusted-proxy` | - | Trusted proxy IP/CIDR whose `Forwarded` / `X-Forwarded-*` headers are honored |
 | `--retention-incomplete` | 7 | Days to keep incomplete sessions |
-| `--retention-history` | 30 | Days to keep history |
+| `--retention-history` | 30 | Days to keep history (`0` = never delete). A retention saved from the app Settings overrides it, see below |
 | `--no-sqlite` | false | DEPRECATED: legacy JSON mode |
 
 ### Configuration File (`config.json`)
@@ -113,6 +118,23 @@ These are intended to answer quickly:
 ```
 
 CLI arguments take priority over the config file.
+
+### History retention
+
+Incomplete sessions and history items are swept at startup and then every 24
+hours while the server runs. The history retention is resolved at each sweep, so
+a change made from the app applies without a restart:
+
+1. a valid `retention.historyDays` stored in `app_settings.json` (set through
+   `POST /api/config/settings` from the app Settings): `null` means never
+   delete, otherwise an integer between 1 and 3650 days;
+2. otherwise the `--retention-history` / `retention_history_days` server value;
+   `0` or a negative value means never delete (it no longer purges every
+   item).
+
+`GET /api/config/settings` (and the `POST` response) adds a computed
+`retentionEffective` object (`historyDays`, `source`, `defaultHistoryDays`).
+It is never persisted. An invalid `retention` block is rejected with `400`.
 
 ### Bootstrap auth via environment
 
@@ -228,7 +250,9 @@ Important points:
 
 - `POST /api/history/item` - store a generated file
   - accepts raw binary request bodies with query-string metadata (web nominal path)
-- `GET /api/history` - list history items
+- `GET /api/history` - unified history (scanned sessions + generated items), newest first
+  - query: `origin=scanned|generated`, `includeIncomplete`, `since`, `limit`, `offset`
+  - headers: `X-Total-Count` (whole filtered list), `X-Total-Count-Scanned`, `X-Total-Count-Generated`; the `ETag` covers the whole filtered list and the requested page
 - `GET /api/history/item/<id>/file` - download a file
 - `DELETE /api/history/item/<id>` - delete an item
 
