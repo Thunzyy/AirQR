@@ -2,7 +2,7 @@ name: airqr_mobile
 description: "Air-gapped file transfer using animated QR codes."
 publish_to: "none"
 
-version: 1.0.0+11
+version: 1.0.0+12
 
 environment:
   sdk: ^3.10.1
@@ -72,7 +72,7 @@ msix_config:
   identity_name: SenTent.AirQR
   publisher: CN=5C0FDEB8-F6D7-4FBA-907B-578E36D8A3D6
   # Microsoft Store requires the fourth (revision) segment to be zero.
-  msix_version: 1.0.11.0
+  msix_version: 1.0.12.0
   logo_path: ../../assets/icon-512.png
   capabilities: internetClient, privateNetworkClientServer, webcam
   languages: en-us, fr-fr
