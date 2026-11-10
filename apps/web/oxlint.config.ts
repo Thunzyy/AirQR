@@ -7,7 +7,6 @@ export default defineConfig({
     "src/pkg-threaded/**",
     ".agent/**",
     ".agents/**",
-    ".claude/**",
     ".codex/**",
     ".continue/**",
     ".cursor/**",

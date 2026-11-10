@@ -15,7 +15,7 @@ fn main() -> Result<()> {
 
     if args.len() < 2 {
         eprintln!("Usage: {} <file_path>", args[0]);
-        eprintln!("Example: {} CLAUDE.md", args[0]);
+        eprintln!("Example: {} README.md", args[0]);
         eprintln!("\nThis encoder uses 1-bit (black/white) QR codes at 177x177px");
         eprintln!("Output: Animated WebP (20-30% smaller than GIF)");
         eprintln!("\nRequires: img2webp tool (from libwebp package)");

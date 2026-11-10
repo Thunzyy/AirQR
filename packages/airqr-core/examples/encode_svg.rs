@@ -13,7 +13,7 @@ fn main() -> Result<()> {
 
     if args.len() < 2 {
         eprintln!("Usage: {} <file_path>", args[0]);
-        eprintln!("Example: {} CLAUDE.md", args[0]);
+        eprintln!("Example: {} README.md", args[0]);
         eprintln!("\nThis encoder creates an animated SVG HTML file");
         eprintln!("Result: ~65% smaller than GIF 1-bit!");
         std::process::exit(1);

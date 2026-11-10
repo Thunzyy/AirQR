@@ -26,11 +26,6 @@ tmp-pytest/
 .idea/
 *.iml
 
-# Claude / AI tooling
-.claude/
-CLAUDE.md
-CLAUDE.local.md
-
 # Tests
 tests/
 .pytest_cache/
