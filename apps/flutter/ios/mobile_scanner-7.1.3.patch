@@ -1,5 +1,10 @@
 --- a/MobileScannerPlugin.swift
 +++ b/MobileScannerPlugin.swift
+@@ -1,3 +1,4 @@
+ import AVFoundation
++import CoreImage
+ import Vision
+ import VideoToolbox
 @@ -143 +143 @@
 -    var imagesCurrentlyBeingProcessed = false
 +    private let decodeSlot = DispatchSemaphore(value: 1)
@@ -218,3 +223,42 @@
 +            configureHighFrameRate(device)
 +        }
 +#endif
+@@ -1042,1 +1050,24 @@
+ extension VNBarcodeObservation {
++    private func airqrBytePayload(_ descriptor: CIQRCodeDescriptor) -> Data? {
++        let codewords = [UInt8](descriptor.errorCorrectedPayload)
++        // AirQR encoders emit a single byte-mode segment. The mode and
++        // character count leave the message four bits off byte alignment.
++        let countBytes = descriptor.symbolVersion < 10 ? 1 : 2
++        guard codewords.count > countBytes, codewords[0] >> 4 == 0b0100 else {
++            return nil
++        }
++        var count = Int(codewords[0] & 0x0f)
++        for index in 1..<countBytes {
++            count = (count << 8) | Int(codewords[index])
++        }
++        count = (count << 4) | Int(codewords[countBytes] >> 4)
++        guard count > 0, count <= codewords.count - countBytes - 1 else {
++            return nil
++        }
++        let end = countBytes + count
++        guard codewords[end] & 0x0f == 0 else { return nil }
++        return Data((countBytes..<end).map { index in
++            (codewords[index] << 4) | (codewords[index + 1] >> 4)
++        })
++    }
++
+@@ -1091,7 +1122,11 @@
+         var rawBytes: FlutterStandardTypedData? = nil
+-        
+-        if #available(iOS 17.0, macOS 14.0, *) {
++        if symbology == .qr {
++            if let descriptor = barcodeDescriptor as? CIQRCodeDescriptor,
++               let payload = airqrBytePayload(descriptor) {
++                rawBytes = FlutterStandardTypedData(bytes: payload)
++            }
++        } else if #available(iOS 17.0, macOS 14.0, *) {
+             if let payloadData = payloadData {
+                 rawBytes = FlutterStandardTypedData(bytes: payloadData)
+             }
+         }
