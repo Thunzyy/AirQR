@@ -7,6 +7,14 @@ workflows:
       flutter: '3.38.6'
       xcode: '16.4'
     scripts:
+      - name: Verify server sync, camera overlay and keyboard
+        script: |
+          set -euo pipefail
+          cd apps/flutter
+          flutter pub get --enforce-lockfile
+          flutter test --no-pub --reporter expanded test/settings_sync_controller_test.dart test/qr_overlay_painter_test.dart
+          flutter test --no-pub --reporter expanded --plain-name 'Settings sync verifies credentials before saving them' test/settings_page_test.dart
+          flutter test --no-pub --reporter expanded --plain-name 'Sync fields stay reachable as the keyboard changes height' test/app_shell_test.dart
       - name: Build Flutter for iPhone
         script: |
           set -euo pipefail
@@ -16,8 +24,73 @@ workflows:
           export PATH="$HOME/.cargo/bin:$PATH"
           rustup target add aarch64-apple-ios
           cd apps/flutter
-          flutter pub get --enforce-lockfile
           flutter build ios --release --no-codesign --no-pub
+      - name: Verify Apple Vision decodes the web encoder bytes
+        script: |
+          set -euo pipefail
+          export AIRQR_VISION_FIXTURES="$(mktemp -d)"
+          node --input-type=module <<'JS'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          import { encode_qr_packet, initSync } from './apps/web/src/pkg/airqr_core.js';
+
+          initSync({ module: readFileSync('./apps/web/src/pkg/airqr_core_bg.wasm') });
+          const fixtureDir = process.env.AIRQR_VISION_FIXTURES;
+          const packetId = Buffer.from([0x00, 0x80, 0x9f, 0xff]);
+          const totalSize = 8192;
+          for (const count of [32, 1621]) {
+            const packet = Uint8Array.from({ length: count }, (_, index) => (index * 131 + 17) & 255);
+            const frame = encode_qr_packet(packet, totalSize, count, packetId, 'LOW', 177, 6);
+            const header = Buffer.alloc(6);
+            header.writeUInt32BE(totalSize, 0);
+            header.writeUInt16BE(count, 4);
+            writeFileSync(join(fixtureDir, `${count}.gray`), frame.map(index => index === 0 ? 255 : 0));
+            writeFileSync(join(fixtureDir, `${count}.bin`), Buffer.concat([header, packetId, packet]));
+          }
+          JS
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from textwrap import dedent
+
+          source = Path('apps/flutter/ios/Pods/AirQRMobileScanner/MobileScannerPlugin.swift').read_text()
+          start = source.index('    private func airqrBytePayload(')
+          end = source.index('\n    }\n', start) + len('\n    }')
+          parser = dedent(source[start:end]).removeprefix('private ')
+          swift = r'''
+          import CoreGraphics
+          import CoreImage
+          import Foundation
+          import Vision
+
+          PARSER
+
+          let fixtures = URL(fileURLWithPath: ProcessInfo.processInfo.environment["AIRQR_VISION_FIXTURES"]!, isDirectory: true)
+          for count in [32, 1621] {
+              let pixels = try Data(contentsOf: fixtures.appendingPathComponent("\(count).gray"))
+              let expected = try Data(contentsOf: fixtures.appendingPathComponent("\(count).bin"))
+              let side = Int(Double(pixels.count).squareRoot())
+              guard side * side == pixels.count,
+                    let provider = CGDataProvider(data: pixels as CFData),
+                    let image = CGImage(width: side, height: side, bitsPerComponent: 8, bitsPerPixel: 8,
+                                        bytesPerRow: side, space: CGColorSpaceCreateDeviceGray(),
+                                        bitmapInfo: CGBitmapInfo(rawValue: 0), provider: provider,
+                                        decode: nil, shouldInterpolate: false, intent: .defaultIntent) else {
+                  fatalError("Could not create the web QR image for \(count) bytes")
+              }
+              let request = VNDetectBarcodesRequest()
+              request.symbologies = [.qr]
+              try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+              guard let descriptor = request.results?.first?.barcodeDescriptor as? CIQRCodeDescriptor,
+                    let decoded = airqrBytePayload(descriptor), decoded == expected else {
+                  fatalError("Vision did not recover the web packet of \(count) bytes")
+              }
+              print("Vision recovered \(decoded.count) exact bytes from web QR version \(descriptor.symbolVersion)")
+          }
+          '''
+          (Path(os.environ['AIRQR_VISION_FIXTURES']) / 'verify.swift').write_text(dedent(swift).replace('PARSER', parser))
+          PY
+          swift "$AIRQR_VISION_FIXTURES/verify.swift"
       - name: Package and verify the IPA
         script: |
           set -euo pipefail
@@ -25,7 +98,7 @@ workflows:
           test -f Runner.app/Info.plist
           mkdir -p Payload
           ditto Runner.app Payload/Runner.app
-          ditto -c -k --keepParent Payload AirQR.ipa
-          unzip -tq AirQR.ipa
+          ditto -c -k --keepParent Payload AirQR-iOS-fix-11.ipa
+          unzip -tq AirQR-iOS-fix-11.ipa
     artifacts:
-      - apps/flutter/build/ios/iphoneos/AirQR.ipa
+      - apps/flutter/build/ios/iphoneos/AirQR-iOS-fix-11.ipa
