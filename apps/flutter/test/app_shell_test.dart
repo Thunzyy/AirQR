@@ -10,6 +10,7 @@ import 'package:airqr_mobile/widgets/airqr_press_feedback.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -425,6 +426,13 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'airqr_sync_settings': '{"enabled":true}',
     });
+    FlutterSecureStorage.setMockInitialValues(<String, String>{});
+
+    Future<void> pumpKeyboardLayout() async {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.pump();
+    }
 
     await tester.pumpWidget(
       MaterialApp(
@@ -438,9 +446,9 @@ void main() {
       ),
     );
     await tester.tap(find.byKey(const Key('airqr-bottom-nav-item-4')));
-    await tester.pumpAndSettle();
+    await pumpKeyboardLayout();
     await tester.tap(find.text('Server sync'));
-    await tester.pumpAndSettle();
+    await pumpKeyboardLayout();
 
     final details = find.byKey(const Key('settings-detail-list'));
     final fields = find.descendant(
@@ -456,7 +464,7 @@ void main() {
 
       for (final inset in [300.0, 420.0]) {
         tester.view.viewInsets = FakeViewPadding(bottom: inset);
-        await tester.pumpAndSettle();
+        await pumpKeyboardLayout();
         expect(tester.getRect(details).bottom, 844);
         expect(tester.getRect(field).bottom, lessThanOrEqualTo(844 - inset));
         expect(find.byType(AirQrBottomNav), findsNothing);
@@ -464,7 +472,7 @@ void main() {
 
       FocusManager.instance.primaryFocus?.unfocus();
       tester.view.resetViewInsets();
-      await tester.pumpAndSettle();
+      await pumpKeyboardLayout();
       expect(find.byType(AirQrBottomNav), findsOneWidget);
     }
 
