@@ -1,0 +1,48 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: apps/flutter
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: stable
+          cache: true
+
+      - name: Set up the Rust target for iPhone
+        run: rustup target add aarch64-apple-ios
+
+      - name: Build Flutter for iPhone without signing
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter build ios --release --no-codesign --no-pub
+
+      - name: Package and verify the unsigned IPA
+        run: |
+          cd build/ios/iphoneos
+          test -f Runner.app/Info.plist
+          mkdir -p Payload
+          ditto Runner.app Payload/Runner.app
+          ditto -c -k --keepParent Payload airqr-ios-unsigned.ipa
+          unzip -tq airqr-ios-unsigned.ipa
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: airqr-ios-unsigned
+          path: apps/flutter/build/ios/iphoneos/airqr-ios-unsigned.ipa
+          if-no-files-found: error
