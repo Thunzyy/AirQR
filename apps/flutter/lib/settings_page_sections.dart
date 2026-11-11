@@ -871,6 +871,7 @@ class SettingsSyncSection extends StatelessWidget {
   final bool isSyncTesting;
   final SettingsSyncFeedback? syncFeedback;
   final bool isServerConnected;
+  final bool hasDraftChanges;
   final bool isSyncing;
   final bool canLaunchLocalServer;
   final bool isStartingLocalServer;
@@ -883,7 +884,7 @@ class SettingsSyncSection extends StatelessWidget {
   final String? exportConfigError;
   final bool exportConfigSaved;
   final ValueChanged<bool> onSyncEnabledChanged;
-  final Future<void> Function() onSaveSyncDraft;
+  final VoidCallback onSyncDraftChanged;
   final ValueChanged<bool> onSyncScannedChanged;
   final ValueChanged<bool> onSyncGeneratedChanged;
   final ValueChanged<bool> onAutoSyncChanged;
@@ -906,6 +907,7 @@ class SettingsSyncSection extends StatelessWidget {
     required this.isSyncTesting,
     required this.syncFeedback,
     required this.isServerConnected,
+    required this.hasDraftChanges,
     required this.isSyncing,
     required this.canLaunchLocalServer,
     required this.isStartingLocalServer,
@@ -918,7 +920,7 @@ class SettingsSyncSection extends StatelessWidget {
     required this.exportConfigError,
     required this.exportConfigSaved,
     required this.onSyncEnabledChanged,
-    required this.onSaveSyncDraft,
+    required this.onSyncDraftChanged,
     required this.onSyncScannedChanged,
     required this.onSyncGeneratedChanged,
     required this.onAutoSyncChanged,
@@ -993,9 +995,7 @@ class SettingsSyncSection extends StatelessWidget {
                 label: l10n.settings_serverUrl,
                 controller: serverUrlController,
                 hint: 'https://airqr.example.com',
-                onChanged: (_) {
-                  onSaveSyncDraft();
-                },
+                onChanged: (_) => onSyncDraftChanged(),
                 primaryTextColor: palette.primaryTextColor,
                 secondaryTextColor: palette.secondaryTextColor,
                 fieldBackgroundColor: AirQrTheme.controlSurface(context),
@@ -1007,9 +1007,7 @@ class SettingsSyncSection extends StatelessWidget {
                 label: l10n.settings_username,
                 controller: usernameController,
                 hint: 'admin',
-                onChanged: (_) {
-                  onSaveSyncDraft();
-                },
+                onChanged: (_) => onSyncDraftChanged(),
                 primaryTextColor: palette.primaryTextColor,
                 secondaryTextColor: palette.secondaryTextColor,
                 fieldBackgroundColor: AirQrTheme.controlSurface(context),
@@ -1022,9 +1020,7 @@ class SettingsSyncSection extends StatelessWidget {
                 controller: passwordController,
                 hint: '••••••',
                 obscure: true,
-                onChanged: (_) {
-                  onSaveSyncDraft();
-                },
+                onChanged: (_) => onSyncDraftChanged(),
                 primaryTextColor: palette.primaryTextColor,
                 secondaryTextColor: palette.secondaryTextColor,
                 fieldBackgroundColor: AirQrTheme.controlSurface(context),
@@ -1118,7 +1114,9 @@ class SettingsSyncSection extends StatelessWidget {
                         Expanded(
                           child: ElevatedButton(
                             key: const Key('settings-sync-button'),
-                            onPressed: isSyncing ? null : onPerformSync,
+                            onPressed: isSyncing || hasDraftChanges
+                                ? null
+                                : onPerformSync,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AirQrTheme.actionSurface(
                                 context,
@@ -1203,8 +1201,7 @@ class SettingsSyncSection extends StatelessWidget {
             ],
           ],
         ),
-        if (syncSettings.enabled &&
-            serverUrlController.text.trim().isNotEmpty) ...[
+        if (syncSettings.isConfigured && !hasDraftChanges) ...[
           const SizedBox(height: 16),
           SettingsFileExportSection(
             palette: palette,

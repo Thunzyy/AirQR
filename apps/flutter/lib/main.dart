@@ -1630,20 +1630,12 @@ class _ScannerPageState extends State<ScannerPage> {
                   if (showPreview)
                     ColoredBox(color: Colors.black.withValues(alpha: 0.2)),
                   if (_corners.isNotEmpty && _imageSize != null)
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        return CustomPaint(
-                          painter: QROverlayPainter(
-                            corners: _corners,
-                            imageSize: _imageSize!,
-                            widgetSize: Size(
-                              constraints.maxWidth,
-                              constraints.maxHeight,
-                            ),
-                            color: _overlayColor,
-                          ),
-                        );
-                      },
+                    CustomPaint(
+                      painter: QROverlayPainter(
+                        corners: _corners,
+                        imageSize: _imageSize!,
+                        color: _overlayColor,
+                      ),
                     ),
                 ],
               ),

@@ -33,7 +33,8 @@ class SettingsSyncFeedback {
 
 typedef SaveSyncSettingsCallback = Future<void> Function(SyncSettings settings);
 typedef ClearSyncCacheCallback = void Function();
-typedef TestSyncConnectionCallback = Future<SyncResult> Function();
+typedef TestSyncConnectionCallback =
+    Future<SyncResult> Function(SyncSettings settings);
 typedef RunSyncCallback = Future<SyncResult> Function();
 
 class SettingsSyncController {
@@ -58,48 +59,36 @@ class SettingsSyncController {
     required String username,
     required String password,
   }) {
-    return baseSettings.copyWith(
-      serverUrl: serverUrl.trim(),
+    final trimmedUrl = serverUrl.trim();
+    return SyncSettings(
+      enabled: baseSettings.enabled,
+      serverUrl: trimmedUrl == '/'
+          ? trimmedUrl
+          : trimmedUrl.replaceFirst(RegExp(r'/+$'), ''),
       username: username.isEmpty ? null : username,
       password: password.isEmpty ? null : password,
+      syncScanned: baseSettings.syncScanned,
+      syncGenerated: baseSettings.syncGenerated,
+      autoSync: baseSettings.autoSync,
     );
   }
 
-  Future<SyncSettings> saveDraft({
-    required SyncSettings baseSettings,
-    required String serverUrl,
-    required String username,
-    required String password,
-  }) async {
-    final draft = buildDraft(
-      baseSettings: baseSettings,
-      serverUrl: serverUrl,
-      username: username,
-      password: password,
-    );
-    await _saveSettings(draft);
+  Future<void> saveSettings(SyncSettings settings) async {
+    await _saveSettings(settings);
     _clearCache();
-    return draft;
   }
 
-  Future<SettingsSyncFeedback> testConnection({
-    required SyncSettings baseSettings,
-    required String serverUrl,
-    required String username,
-    required String password,
-  }) async {
-    await saveDraft(
-      baseSettings: baseSettings,
-      serverUrl: serverUrl,
-      username: username,
-      password: password,
-    );
-
-    final result = await _testConnection();
-    if (result.success) {
-      return SettingsSyncFeedback.connectionSuccess();
+  Future<SettingsSyncFeedback> testConnection(SyncSettings draft) async {
+    try {
+      final result = await _testConnection(draft);
+      if (result.success) {
+        await saveSettings(draft);
+        return SettingsSyncFeedback.connectionSuccess();
+      }
+      return SettingsSyncFeedback.error(result.error ?? 'Connection failed');
+    } catch (error) {
+      return SettingsSyncFeedback.error('Connection failed: $error');
     }
-    return SettingsSyncFeedback.error(result.error ?? 'Connection failed');
   }
 
   Future<SettingsSyncFeedback> performSync() async {

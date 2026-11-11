@@ -308,7 +308,8 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     });
     if (shouldPersistRestoredUrl) {
-      unawaited(_saveSyncSettings());
+      await _saveSyncSettings();
+      if (mounted) unawaited(_loadExportConfig());
     }
   }
 
@@ -397,31 +398,33 @@ class _SettingsPageState extends State<SettingsPage> {
     _saveSettings();
   }
 
+  SyncSettings get _syncDraft => _syncController.buildDraft(
+    baseSettings: _syncSettings,
+    serverUrl: _serverUrlController.text,
+    username: _usernameController.text,
+    password: _passwordController.text,
+  );
+
+  bool get _hasSyncDraftChanges =>
+      _serverUrlController.text != _syncSettings.serverUrl ||
+      _usernameController.text != (_syncSettings.username ?? '') ||
+      _passwordController.text != (_syncSettings.password ?? '');
+
   Future<void> _saveSyncSettings() async {
-    _syncSettings = await _syncController.saveDraft(
-      baseSettings: _syncSettings,
-      serverUrl: _serverUrlController.text,
-      username: _usernameController.text,
-      password: _passwordController.text,
-    );
-    widget.settingsChangedNotifier.value++;
-    if (_syncSettings.isConfigured) {
-      unawaited(_loadExportConfig());
-    }
+    await _syncController.saveSettings(_syncSettings);
+    if (mounted) widget.settingsChangedNotifier.value++;
   }
 
   Future<void> _testSyncConnection() async {
+    if (_isSyncTesting) return;
+    FocusScope.of(context).unfocus();
+    final draft = _syncDraft;
     setState(() {
       _isSyncTesting = true;
       _syncFeedback = null;
     });
 
-    final feedback = await _syncController.testConnection(
-      baseSettings: _syncSettings,
-      serverUrl: _serverUrlController.text,
-      username: _usernameController.text,
-      password: _passwordController.text,
-    );
+    final feedback = await _syncController.testConnection(draft);
 
     if (!mounted) return;
     setState(() {
@@ -430,14 +433,14 @@ class _SettingsPageState extends State<SettingsPage> {
       _serverConnectivityStatus = feedback.isSuccess
           ? _ServerConnectivityStatus.connected
           : _ServerConnectivityStatus.unavailable;
-      _syncSettings = _syncController.buildDraft(
-        baseSettings: _syncSettings,
-        serverUrl: _serverUrlController.text,
-        username: _usernameController.text,
-        password: _passwordController.text,
-      );
+      if (feedback.isSuccess) {
+        _syncSettings = draft;
+        _serverUrlController.text = draft.serverUrl;
+        _usernameController.text = draft.username ?? '';
+      }
     });
-    if (_syncSettings.isConfigured && feedback.isSuccess) {
+    if (feedback.isSuccess) {
+      widget.settingsChangedNotifier.value++;
       unawaited(_loadExportConfig());
     }
   }
@@ -467,12 +470,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _saveExportConfig(Object? updates) async {
-    final settings = _syncController.buildDraft(
-      baseSettings: _syncSettings,
-      serverUrl: _serverUrlController.text,
-      username: _usernameController.text,
-      password: _passwordController.text,
-    );
+    final settings = _syncSettings;
     if (!settings.isConfigured) return;
 
     setState(() {
@@ -490,7 +488,6 @@ class _SettingsPageState extends State<SettingsPage> {
         setState(() => _exportConfigSaved = false);
       });
       setState(() {
-        _syncSettings = settings;
         _exportConfig = config;
         _exportDirController.text = config.exportDir ?? '';
         _isExportConfigLoading = false;
@@ -996,7 +993,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildSyncSection() {
-    return SettingsSyncSection(
+    final hasDraftChanges = _hasSyncDraftChanges;
+    final section = SettingsSyncSection(
       palette: _sectionPalette(),
       syncSettings: _syncSettings,
       serverUrlController: _serverUrlController,
@@ -1004,7 +1002,9 @@ class _SettingsPageState extends State<SettingsPage> {
       passwordController: _passwordController,
       isSyncTesting: _isSyncTesting,
       syncFeedback: _syncFeedback,
+      hasDraftChanges: hasDraftChanges,
       isServerConnected:
+          !hasDraftChanges &&
           _serverConnectivityStatus == _ServerConnectivityStatus.connected,
       isSyncing: _isSyncing,
       canLaunchLocalServer: _localServerController.canStartOnThisPlatform,
@@ -1023,20 +1023,16 @@ class _SettingsPageState extends State<SettingsPage> {
           if (!v) {
             _serverConnectivityStatus = _ServerConnectivityStatus.unavailable;
           }
-          if (v && _serverUrlController.text.isEmpty) {
-            _serverUrlController.text = 'https://airqr.example.com';
-            _syncSettings = _syncSettings.copyWith(
-              serverUrl: _serverUrlController.text,
-            );
-          }
         });
         await _saveSyncSettings();
+        if (mounted && _syncSettings.isConfigured && !_hasSyncDraftChanges) {
+          unawaited(_loadExportConfig());
+        }
       },
-      onSaveSyncDraft: () async {
+      onSyncDraftChanged: () {
         setState(() {
-          _serverConnectivityStatus = _ServerConnectivityStatus.unavailable;
+          _syncFeedback = null;
         });
-        await _saveSyncSettings();
       },
       onSyncScannedChanged: (v) {
         setState(() {
@@ -1070,6 +1066,7 @@ class _SettingsPageState extends State<SettingsPage> {
             : _exportDirController.text.trim(),
       }),
     );
+    return AbsorbPointer(absorbing: _isSyncTesting, child: section);
   }
 
   Widget _buildOfflineWebSection() {

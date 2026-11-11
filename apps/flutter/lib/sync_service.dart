@@ -377,9 +377,7 @@ class SyncService {
   }
 
   /// Fetch session info (counts/progress) for a specific scan session.
-  static Future<WireObject?> fetchSessionInfo(
-    String sessionId,
-  ) async {
+  static Future<WireObject?> fetchSessionInfo(String sessionId) async {
     final serverId = ServerId.tryParse(sessionId);
     if (serverId == null) return null;
     final settings = await getSettings();
@@ -956,25 +954,50 @@ class SyncService {
   }
 
   /// Tests connection to the server.
-  static Future<SyncResult> testConnection() async {
-    final settings = await getSettings();
-    if (!settings.isConfigured) {
-      return SyncResult.error('Server URL not configured');
+  static Future<SyncResult> testConnection(SyncSettings settings) async {
+    final serverUrl = settings.serverUrl.trim();
+    if (const {'same-origin', 'self', '/'}.contains(serverUrl.toLowerCase())) {
+      return SyncResult.error(
+        'Same-origin is only available in the web app. Enter the full server URL (https://…).',
+      );
+    }
+    final serverUri = Uri.tryParse(serverUrl);
+    if (!settings.isConfigured ||
+        serverUri == null ||
+        serverUri.hasQuery ||
+        serverUri.hasFragment ||
+        serverUri.userInfo.isNotEmpty) {
+      return SyncResult.error('Enter a full HTTP or HTTPS server URL.');
     }
 
     try {
-      final url = Uri.parse('${settings.serverUrl}/api/history');
-      final response = await _httpClientFor(settings)
-          .get(url, headers: _headers(settings))
+      final base = serverUrl.replaceFirst(RegExp(r'/+$'), '');
+      final request =
+          http.Request('GET', Uri.parse('$base/api/history?limit=1'))
+            ..followRedirects = false
+            ..headers.addAll(_headers(settings, json: false));
+      final client = _httpClientFor(settings);
+      final response = await client
+          .send(request)
+          .then(http.Response.fromStream)
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        return SyncResult.ok();
+        if (isJsonList(parseJsonText(response.body))) return SyncResult.ok();
+        return SyncResult.error('The URL did not return AirQR server history.');
       } else if (response.statusCode == 401) {
-        return SyncResult.error('Authentication failed');
+        return SyncResult.error(
+          'Authentication failed. Check the username and password.',
+        );
+      } else if (response.statusCode == 429) {
+        return SyncResult.error(
+          'Too many requests (429). Wait before testing again.',
+        );
       } else {
         return SyncResult.error('Server returned ${response.statusCode}');
       }
+    } on FormatException {
+      return SyncResult.error('The URL did not return AirQR server history.');
     } catch (e) {
       return SyncResult.error('Connection failed: $e');
     }
