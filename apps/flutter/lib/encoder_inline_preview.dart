@@ -29,6 +29,7 @@ class _EncoderInlineGifPreviewState extends State<EncoderInlineGifPreview> {
   Uint8List? _codecSource;
   int? _codecFrameNumber;
   int _decodeGeneration = 0;
+  bool _decoding = false;
   bool _animationsDisabled = false;
 
   @override
@@ -63,21 +64,31 @@ class _EncoderInlineGifPreviewState extends State<EncoderInlineGifPreview> {
 
   void _ensureFrame() {
     final frameNumber = widget.frameNumber < 1 ? 1 : widget.frameNumber;
-    if (identical(_codecSource, widget.gifData) &&
+    if (!_decoding &&
+        identical(_codecSource, widget.gifData) &&
         _codecFrameNumber == frameNumber &&
         _currentImage != null) {
       return;
     }
 
-    final generation = ++_decodeGeneration;
-    unawaited(_decodeFrame(widget.gifData, frameNumber, generation));
+    _decodeGeneration++;
+    if (!_decoding) unawaited(_decodeLatestFrames());
   }
 
-  Future<void> _decodeFrame(
-    Uint8List source,
-    int frameNumber,
-    int generation,
-  ) async {
+  Future<void> _decodeLatestFrames() async {
+    _decoding = true;
+    try {
+      int generation;
+      do {
+        generation = _decodeGeneration;
+        await _decodeFrame(widget.gifData, widget.frameNumber);
+      } while (mounted && generation != _decodeGeneration);
+    } finally {
+      _decoding = false;
+    }
+  }
+
+  Future<void> _decodeFrame(Uint8List source, int frameNumber) async {
     ui.Codec? codec;
     ui.Image? decodedImage;
     var decodedFrameNumber = 0;
@@ -110,7 +121,7 @@ class _EncoderInlineGifPreviewState extends State<EncoderInlineGifPreview> {
       return;
     }
 
-    if (!mounted || generation != _decodeGeneration) {
+    if (!mounted || !identical(source, widget.gifData)) {
       decodedImage?.dispose();
       codec.dispose();
       return;

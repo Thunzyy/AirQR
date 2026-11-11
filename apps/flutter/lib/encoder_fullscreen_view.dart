@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'airqr_icon.dart';
+import 'encoder_defaults.dart';
 import 'airqr_theme.dart';
 import 'encoder_inline_preview.dart';
 import 'l10n/app_localizations.dart';
@@ -68,7 +69,7 @@ class _EncoderFullscreenGifViewState extends State<EncoderFullscreenGifView> {
   void initState() {
     super.initState();
     _currentChunkIndex = _normalizedInitialChunk;
-    _playbackFps = widget.fps.clamp(1, 60);
+    _playbackFps = widget.fps.clamp(1, EncoderDefaults.maxPlaybackFps);
     _autoAdvanceChunks = widget.initialAutoAdvanceChunks;
     _frameController = TextEditingController(text: '1');
     _fpsController = TextEditingController(text: '$_playbackFps');
@@ -185,7 +186,7 @@ class _EncoderFullscreenGifViewState extends State<EncoderFullscreenGifView> {
     _stopPlayback();
     if (!_isPlaying || _animationsDisabled || _playbackFps <= 0) return;
     _frameTimer = Timer.periodic(
-      Duration(milliseconds: (1000 / _playbackFps).round()),
+      EncoderDefaults.playbackInterval(_playbackFps),
       (_) => _advancePlayback(),
     );
   }
@@ -237,7 +238,7 @@ class _EncoderFullscreenGifViewState extends State<EncoderFullscreenGifView> {
   }
 
   void _setPlaybackFps(int fps) {
-    final next = fps.clamp(1, 60);
+    final next = fps.clamp(1, EncoderDefaults.maxPlaybackFps);
     setState(() {
       _playbackFps = next;
       _fpsController.text = '$next';

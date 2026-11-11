@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'airqr_icon.dart';
 import 'airqr_theme.dart';
+import 'encoder_defaults.dart';
 import 'encoder_inline_preview.dart';
 import 'l10n/app_localizations.dart';
 
@@ -62,7 +63,9 @@ class _MultiChunkViewerState extends State<MultiChunkViewer> {
     _timer?.cancel();
     if (_animationsDisabled || widget.gifs.isEmpty) return;
     _timer = Timer.periodic(
-      Duration(milliseconds: (1000 / widget.fps.clamp(1, 60)).round()),
+      EncoderDefaults.playbackInterval(
+        widget.fps.clamp(1, EncoderDefaults.maxPlaybackFps),
+      ),
       (_) {
         if (!mounted) return;
         setState(() {

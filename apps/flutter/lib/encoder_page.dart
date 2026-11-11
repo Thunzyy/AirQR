@@ -72,7 +72,7 @@ class EncoderChunkPlaybackController
     _stopTimer();
     _frameCounts = frameCounts;
     _chunkCount = chunkCount;
-    _fps = fps.clamp(1, 60);
+    _fps = fps.clamp(1, EncoderDefaults.maxPlaybackFps);
     value = EncoderChunkPlaybackState(
       playbackFps: _fps,
       isPlaying: autoplay && !_animationsDisabled,
@@ -95,7 +95,7 @@ class EncoderChunkPlaybackController
   }
 
   void setPlaybackFps(int fps) {
-    final next = fps.clamp(1, 60);
+    final next = fps.clamp(1, EncoderDefaults.maxPlaybackFps);
     if (next == _fps) return;
     _fps = next;
     value = value.copyWith(playbackFps: next);
@@ -143,7 +143,7 @@ class EncoderChunkPlaybackController
         _frameCounts[value.selectedChunkIndex] <= 0) {
       return;
     }
-    final interval = Duration(milliseconds: (1000 / _fps).round());
+    final interval = EncoderDefaults.playbackInterval(_fps);
     _timer = Timer.periodic(interval, (timer) {
       if (_animationsDisabled ||
           !value.isPlaying ||
@@ -363,9 +363,7 @@ class _EncoderPageState extends State<EncoderPage> {
       return;
     }
 
-    final interval = Duration(
-      milliseconds: (1000 / _previewPlaybackFps).round(),
-    );
+    final interval = EncoderDefaults.playbackInterval(_previewPlaybackFps);
     _frameTimer = Timer.periodic(interval, (timer) {
       if (!mounted || _animationsDisabled) {
         timer.cancel();
@@ -398,7 +396,7 @@ class _EncoderPageState extends State<EncoderPage> {
   }
 
   void _setPreviewPlaybackFps(int fps) {
-    final next = fps.clamp(1, 60);
+    final next = fps.clamp(1, EncoderDefaults.maxPlaybackFps);
     if (next == _previewPlaybackFps) return;
     setState(() => _previewPlaybackFps = next);
     if (_isPreviewPlaying) _startFrameAnimation();
@@ -701,7 +699,7 @@ class _EncoderPageState extends State<EncoderPage> {
             _minFrames = result.minFrames;
             _encodingDuration = duration;
             _encodedInputSize = inputData.length;
-            _previewPlaybackFps = _fps.clamp(1, 60);
+            _previewPlaybackFps = _fps.clamp(1, EncoderDefaults.maxPlaybackFps);
             _isPreviewPlaying = !_animationsDisabled;
           });
           _startFrameAnimation();
