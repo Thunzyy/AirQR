@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   const navItems = [
@@ -412,6 +413,62 @@ void main() {
     expect(pageStackRect.bottom, 844);
     expect(pageStackRect.bottom, greaterThan(navRect.top));
     expect(find.text('0.0'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Sync fields stay reachable as the keyboard changes height', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'airqr_sync_settings': '{"enabled":true}',
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: MainPage(
+          buildScannerPage:
+              ({required settingsChangedNotifier, required isActive}) =>
+                  const SizedBox.shrink(),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('airqr-bottom-nav-item-4')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Server sync'));
+    await tester.pumpAndSettle();
+
+    final details = find.byKey(const Key('settings-detail-list'));
+    final fields = find.descendant(
+      of: details,
+      matching: find.byType(TextField),
+    );
+    expect(fields, findsNWidgets(3));
+
+    for (var index = 0; index < 3; index++) {
+      final field = fields.at(index);
+      await tester.ensureVisible(field);
+      await tester.showKeyboard(field);
+
+      for (final inset in [300.0, 420.0]) {
+        tester.view.viewInsets = FakeViewPadding(bottom: inset);
+        await tester.pumpAndSettle();
+        expect(tester.getRect(details).bottom, 844);
+        expect(tester.getRect(field).bottom, lessThanOrEqualTo(844 - inset));
+        expect(find.byType(AirQrBottomNav), findsNothing);
+      }
+
+      FocusManager.instance.primaryFocus?.unfocus();
+      tester.view.resetViewInsets();
+      await tester.pumpAndSettle();
+      expect(find.byType(AirQrBottomNav), findsOneWidget);
+    }
+
+    expect(tester.widget<TextField>(fields.last).obscureText, isTrue);
     expect(tester.takeException(), isNull);
   });
 
