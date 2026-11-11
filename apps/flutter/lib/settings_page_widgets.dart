@@ -450,6 +450,12 @@ class SettingsTextFieldTile extends StatelessWidget {
           TextField(
             controller: controller,
             obscureText: obscure,
+            scrollPadding: EdgeInsets.fromLTRB(
+              20,
+              20,
+              20,
+              MediaQuery.viewInsetsOf(context).bottom + 20,
+            ),
             style: TextStyle(color: primaryTextColor),
             decoration: InputDecoration(
               hintText: hint,

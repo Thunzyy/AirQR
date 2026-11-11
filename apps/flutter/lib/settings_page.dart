@@ -800,6 +800,7 @@ class _SettingsPageState extends State<SettingsPage> {
       },
       child: Scaffold(
         backgroundColor: _pageBackgroundColor,
+        resizeToAvoidBottomInset: false,
         body: SafeArea(
           child: _selectedSettingsSection == null
               ? _buildSettingsMenu(context)
@@ -850,6 +851,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _buildSettingsDetail(BuildContext context) {
     final selectedSection = _selectedSettingsSection;
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
     final selectedEntry = _settingsMenuEntries(
       context,
     ).firstWhere((entry) => entry.section == selectedSection);
@@ -860,7 +862,9 @@ class _SettingsPageState extends State<SettingsPage> {
         16,
         8,
         16,
-        settingsBottomNavigationClearance(context),
+        keyboardInset > 0
+            ? keyboardInset + 16
+            : settingsBottomNavigationClearance(context),
       ),
       children: [
         _SettingsDetailHeader(
