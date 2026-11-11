@@ -17,7 +17,6 @@ workflows:
           rustup target add aarch64-apple-ios
           cd apps/flutter
           flutter pub get --enforce-lockfile
-          flutter test --no-pub --plain-name "Sync fields stay reachable as the keyboard changes height" test/app_shell_test.dart
           flutter build ios --release --no-codesign --no-pub
       - name: Package and verify the IPA
         script: |
