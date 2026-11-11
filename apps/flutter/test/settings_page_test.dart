@@ -1970,6 +1970,8 @@ void main() {
 
     final testConnection = find.byKey(const Key('settings-connection-button'));
     await tester.ensureVisible(testConnection);
+    await tester.pumpAndSettle();
+    expect(testConnection.hitTestable(), findsOneWidget);
     await tester.tap(testConnection);
     await tester.pumpAndSettle();
 
