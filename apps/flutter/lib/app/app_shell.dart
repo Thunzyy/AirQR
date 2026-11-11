@@ -254,20 +254,27 @@ class _MainPageState extends State<MainPage> {
       sizing: StackFit.expand,
       children: pages,
     );
+    final settingsActive = _currentIndex == 4;
+    final settingsKeyboardVisible =
+        settingsActive && MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
       extendBody: true,
+      // Settings keeps its scroll viewport painted behind the keyboard.
+      resizeToAvoidBottomInset: !settingsActive,
       backgroundColor: AirQrTheme.background(context),
       body: MediaQuery.removePadding(
         context: context,
         removeBottom: true,
         child: pageStack,
       ),
-      bottomNavigationBar: AirQrBottomNav(
-        currentIndex: _currentIndex,
-        onTap: selectDestination,
-        items: items,
-      ),
+      bottomNavigationBar: settingsKeyboardVisible
+          ? null
+          : AirQrBottomNav(
+              currentIndex: _currentIndex,
+              onTap: selectDestination,
+              items: items,
+            ),
     );
   }
 }
