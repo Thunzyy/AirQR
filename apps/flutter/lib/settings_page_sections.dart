@@ -1330,6 +1330,12 @@ class SettingsFileExportSection extends StatelessWidget {
                     child: TextField(
                       controller: exportDirController,
                       enabled: fieldEnabled,
+                      scrollPadding: EdgeInsets.fromLTRB(
+                        20,
+                        20,
+                        20,
+                        MediaQuery.viewInsetsOf(context).bottom + 20,
+                      ),
                       style: TextStyle(color: palette.primaryTextColor),
                       decoration: InputDecoration(
                         hintText: l10n.settings_exportDirectoryPlaceholder,
