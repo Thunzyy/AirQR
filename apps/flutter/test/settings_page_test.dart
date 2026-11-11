@@ -1808,7 +1808,7 @@ void main() {
       final syncController = SettingsSyncController(
         saveSettings: (_) async {},
         clearCache: () {},
-        testConnection: () async {
+        testConnection: (_) async {
           testConnectionCount++;
           return SyncResult.ok();
         },
@@ -1880,10 +1880,21 @@ void main() {
     },
   );
 
-  testWidgets('Settings sync includes the server file export controls', (
+  testWidgets('Settings sync verifies credentials before saving them', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
+    final notifier = ValueNotifier<int>(0);
+    final testedPasswords = <String?>[];
+    final savedPasswords = <String?>[];
+    final syncController = SettingsSyncController(
+      saveSettings: (settings) async => savedPasswords.add(settings.password),
+      clearCache: () {},
+      testConnection: (settings) async {
+        testedPasswords.add(settings.password);
+        return SyncResult.ok();
+      },
+    );
     final controller = _FakeSettingsPageController(
       SettingsPageSnapshot(
         selectedPreset: ScannerPreset.fast,
@@ -1915,8 +1926,9 @@ void main() {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: SettingsPage(
-          settingsChangedNotifier: ValueNotifier<int>(0),
+          settingsChangedNotifier: notifier,
           pageController: controller,
+          syncController: syncController,
           exportConfigController: _FakeSettingsExportConfigController(
             const SettingsExportConfig(
               exportDir: r'C:\AirQR-Files',
@@ -1945,5 +1957,24 @@ void main() {
         .getTopLeft(find.byType(SettingsFileExportSection))
         .dx;
     expect(headerLeft - cardLeft, lessThan(80));
+
+    final password = find.byWidgetPredicate(
+      (widget) => widget is TextField && widget.obscureText,
+    );
+    await tester.enterText(password, 'n');
+    await tester.enterText(password, 'new-password');
+    await tester.pumpAndSettle();
+    expect(testedPasswords, isEmpty);
+    expect(savedPasswords, isEmpty);
+    expect(notifier.value, 0);
+
+    final testConnection = find.byKey(const Key('settings-connection-button'));
+    await tester.ensureVisible(testConnection);
+    await tester.tap(testConnection);
+    await tester.pumpAndSettle();
+
+    expect(testedPasswords, ['new-password']);
+    expect(savedPasswords, ['new-password']);
+    expect(notifier.value, 1);
   });
 }

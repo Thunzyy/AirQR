@@ -6,13 +6,11 @@ void main() {
   QROverlayPainter painter({
     List<Offset> corners = const <Offset>[Offset(1, 2), Offset(3, 4)],
     Size imageSize = const Size(640, 480),
-    Size widgetSize = const Size(320, 240),
     Color color = Colors.green,
   }) {
     return QROverlayPainter(
       corners: corners,
       imageSize: imageSize,
-      widgetSize: widgetSize,
       color: color,
     );
   }
@@ -63,12 +61,33 @@ void main() {
     );
   });
 
-  test('repaints when widget size changes', () {
-    final previous = painter();
+  testWidgets('matches the cropped portrait camera preview', (tester) async {
+    final overlay = painter(
+      imageSize: const Size(120, 160),
+      corners: const [
+        Offset(30, 40),
+        Offset(90, 40),
+        Offset(90, 100),
+        Offset(30, 100),
+      ],
+    );
+    const previewKey = Key('preview');
+    await tester.pumpWidget(
+      Center(
+        child: CustomPaint(
+          key: previewKey,
+          size: const Size(80, 160),
+          painter: overlay,
+        ),
+      ),
+    );
 
     expect(
-      painter(widgetSize: const Size(360, 640)).shouldRepaint(previous),
-      isTrue,
+      find.byKey(previewKey),
+      paints..path(
+        includes: const [Offset(11, 41), Offset(69, 99)],
+        excludes: const [Offset(9, 41), Offset(71, 99)],
+      ),
     );
   });
 
