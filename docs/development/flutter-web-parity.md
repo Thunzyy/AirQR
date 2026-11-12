@@ -62,7 +62,7 @@ The iOS patch remains pinned to `mobile_scanner` 7.1.3 and is applied to a Pods 
 | Command (working directory) | Result |
 | --- | --- |
 | `flutter test --no-pub` (`apps/flutter`) | 664 passed; capture and live-server smoke tests are opt-in. |
-| `flutter test --no-pub test/parity_visual_capture_test.dart --dart-define=AIRQR_CAPTURE_DIR=<absolute-output-directory> --dart-define=AIRQR_MONO_FONT=C:/Windows/Fonts/consola.ttf` (`apps/flutter`) | 2 passed; 28 real-widget captures at 402×874, light/dark. The optional monospace font is only for the test renderer. |
+| `flutter test --no-pub test/parity_visual_capture_test.dart --dart-define=AIRQR_CAPTURE_DIR=<absolute-output-directory> --dart-define=AIRQR_MONO_FONT=C:/Windows/Fonts/consola.ttf` (`apps/flutter`) | 2 passed; 26 real-widget captures at 402×874, light/dark. The optional monospace font is only for the test renderer. |
 | `flutter test --no-pub test/history_page_refresh_test.dart` (`apps/flutter`, after final cleanup) | 19 passed. |
 | `flutter analyze --no-pub` (`apps/flutter`) | No issues. |
 | `npm test` (`apps/web`) | 85 files / 635 tests passed. |
