@@ -80,3 +80,9 @@ The native `ScannerLocalDecodeController._handleProgress` still awaits each pack
 Web generation already uses workers and WASM; this change does not claim a new web-generation speedup. Camera focus, exposure, resolution and actual optical scan throughput require physical-device measurements. The current web fixes recover exception-related gate stalls, not every possible worker hang or hardware bottleneck.
 
 Next device check: generate the same medium/large file before and after, open and close the large GIF/ZIP twice, scan a fixed and then animated QR, interrupt/resume, and compare elapsed time, unique packet progression and memory. Preserve the previously verified binary QR, reset, keyboard and toolbar behavior. Merge/deployment is a separate action; this work introduces no schema migration.
+
+## iOS delivery
+
+[PR #16](https://github.com/Thunzyy/AirQR/pull/16) targets PR #14's branch. Implementation commit: `014c09a30af941f75dcaf600691a3a2b8073370c`. [Build 43225209042](https://github.com/Thunzyy/AirQR/actions/runs/43225209042) succeeded on that exact revision. The subsequent documentation commit does not change application code.
+
+The downloaded `AirQR-iOS-performance.ipa` passed ZIP integrity and arm64 Mach-O checks (23,668,092 bytes). SHA-256: `47A118892C97080D7D3A7262AA08602057A0A0FD8A5CF3D1BE821FCED3210B0F`. It is unsigned and requires the usual signing/sideload method. Build success does not substitute for physical-device performance verification. Rollback: revert `014c09a3`.
