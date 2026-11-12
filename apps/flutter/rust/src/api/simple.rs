@@ -131,6 +131,54 @@ fn prepare_payload(filename: &str, data: &[u8], compress: bool) -> Vec<u8> {
     encoded
 }
 
+// Bound intermediate images regardless of input size, and compress their GIF
+// payloads in the same Rayon jobs as QR rendering. GIF order stays deterministic.
+fn encode_packet_gif<F>(
+    packets: &[raptorq::EncodingPacket],
+    frame_delay_ms: u32,
+    render: F,
+) -> Result<Vec<u8>, String>
+where
+    F: Fn(&raptorq::EncodingPacket) -> Option<(Vec<u8>, u16)> + Sync,
+{
+    let prepare = |packet: &raptorq::EncodingPacket| -> Result<GifFrame<'static>, String> {
+        let (pixels, size) = render(packet).ok_or("QR encode failed")?;
+        let mut frame = GifFrame::from_indexed_pixels(size, size, pixels, None);
+        frame.delay = (frame_delay_ms / 10) as u16;
+        frame.make_lzw_pre_encoded();
+        Ok(frame)
+    };
+    let first = prepare(packets.first().ok_or("No QR packets")?)?;
+    let mut output = Vec::new();
+    {
+        let mut encoder = GifEncoder::new(
+            &mut output,
+            first.width,
+            first.height,
+            &[255, 255, 255, 0, 0, 0],
+        )
+        .map_err(|e| e.to_string())?;
+        encoder
+            .set_repeat(Repeat::Infinite)
+            .map_err(|e| e.to_string())?;
+        encoder
+            .write_lzw_pre_encoded_frame(&first)
+            .map_err(|e| e.to_string())?;
+        for batch in packets[1..].chunks(128) {
+            let frames: Result<Vec<_>, _> = batch.par_iter().map(&prepare).collect();
+            for frame in frames? {
+                if frame.width != first.width || frame.height != first.height {
+                    return Err("QR frame dimensions changed".into());
+                }
+                encoder
+                    .write_lzw_pre_encoded_frame(&frame)
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    Ok(output)
+}
+
 pub fn encode_to_gif(
     filename: String,
     data: Vec<u8>,
@@ -172,52 +220,27 @@ pub fn encode_to_gif(
     let min_frames = (compressed.len() as f64 / packet_size as f64).ceil() as u32;
     let total_size = compressed.len() as u32;
 
-    // PARALLEL QR rendering using rayon
-    let indexed_frames: Vec<(Vec<u8>, u16)> = packets
-        .par_iter()
-        .map(|packet| {
-            let payload_data = packet.data();
-
-            let mut qr_data = Vec::with_capacity(10 + payload_data.len());
-            qr_data.extend_from_slice(&total_size.to_be_bytes());
-            qr_data.extend_from_slice(&packet_size.to_be_bytes());
-            qr_data.extend_from_slice(&packet.payload_id().serialize());
-            qr_data.extend_from_slice(payload_data);
-
-            let qr = QrCode::encode_binary(&qr_data, ecc).expect("QR encode failed");
-            render_qr_1bit(&qr, target_size)
-        })
-        .collect();
-
-    // Get GIF dimensions from first frame
-    let gif_size = indexed_frames.first().map(|(_, s)| *s).unwrap_or(177);
-
-    // Sequential GIF encoding (gif crate requires sequential writes)
-    let mut gif_out = Vec::new();
-    {
-        let color_map = &[0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00]; // White, Black
-
-        let mut encoder = match GifEncoder::new(&mut gif_out, gif_size, gif_size, color_map) {
-            Ok(e) => e,
-            Err(e) => {
-                return EncodeResult {
-                    success: false,
-                    gif_data: None,
-                    total_frames: 0,
-                    min_frames: 0,
-                    error_msg: Some(format!("GIF encoder error: {}", e)),
-                }
+    let gif_out = match encode_packet_gif(&packets, frame_delay_ms, |packet| {
+        let payload_data = packet.data();
+        let mut qr_data = Vec::with_capacity(10 + payload_data.len());
+        qr_data.extend_from_slice(&total_size.to_be_bytes());
+        qr_data.extend_from_slice(&packet_size.to_be_bytes());
+        qr_data.extend_from_slice(&packet.payload_id().serialize());
+        qr_data.extend_from_slice(payload_data);
+        let qr = QrCode::encode_binary(&qr_data, ecc).ok()?;
+        Some(render_qr_1bit(&qr, target_size))
+    }) {
+        Ok(gif) => gif,
+        Err(error) => {
+            return EncodeResult {
+                success: false,
+                gif_data: None,
+                total_frames: 0,
+                min_frames: 0,
+                error_msg: Some(error),
             }
-        };
-
-        let _ = encoder.set_repeat(Repeat::Infinite);
-
-        for (buffer, size) in indexed_frames {
-            let mut frame = GifFrame::from_indexed_pixels(size, size, buffer, None);
-            frame.delay = (frame_delay_ms / 10) as u16;
-            let _ = encoder.write_frame(&frame);
         }
-    }
+    };
 
     EncodeResult {
         success: true,
@@ -331,64 +354,47 @@ pub fn encode_chunked_to_zip(
 
         let total_size = compressed.len() as u32;
 
-        // Parallel QR rendering for this chunk
-        let indexed_frames: Vec<(Vec<u8>, u16)> = packets
-            .par_iter()
-            .map(|packet| {
-                let payload_data = packet.data();
-                render_streaming_qr(
-                    payload_data,
-                    StreamingPacketHeader {
-                        session_id,
-                        chunk_id,
-                        total_chunks,
-                        chunk_offset: chunk_offset as u64,
-                        total_size,
-                        packet_size,
-                        payload_id: packet.payload_id().serialize(),
-                    },
-                    ecc,
-                    target_size,
-                )
-                .unwrap_or_else(|| (vec![], 0))
-            })
-            .collect();
-
-        grand_total_frames += indexed_frames.len() as u32;
-
-        // Get GIF dimensions from first frame
-        let gif_size = indexed_frames.first().map(|(_, s)| *s).unwrap_or(177);
-
-        // Create GIF for this chunk
-        // Store frame count for this chunk (before we consume indexed_frames)
-        let chunk_frames = indexed_frames.len() as u32;
-        chunk_frame_counts.push(chunk_frames);
-
-        let mut gif_out = Vec::new();
-        {
-            let color_map = &[0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00];
-
-            if let Ok(mut encoder) = GifEncoder::new(&mut gif_out, gif_size, gif_size, color_map) {
-                let _ = encoder.set_repeat(Repeat::Infinite);
-
-                for (buffer, size) in indexed_frames {
-                    if size > 0 {
-                        let mut frame = GifFrame::from_indexed_pixels(size, size, buffer, None);
-                        frame.delay = (frame_delay_ms / 10) as u16;
-                        let _ = encoder.write_frame(&frame);
-                    }
+        let gif_out = match encode_packet_gif(&packets, frame_delay_ms, |packet| {
+            render_streaming_qr(
+                packet.data(),
+                StreamingPacketHeader {
+                    session_id,
+                    chunk_id,
+                    total_chunks,
+                    chunk_offset: chunk_offset as u64,
+                    total_size,
+                    packet_size,
+                    payload_id: packet.payload_id().serialize(),
+                },
+                ecc,
+                target_size,
+            )
+        }) {
+            Ok(gif) => gif,
+            Err(error) => {
+                return ChunkedEncodeResult {
+                    success: false,
+                    zip_data: None,
+                    chunk_gifs: vec![],
+                    chunk_frame_counts: vec![],
+                    chunk_min_frames: vec![],
+                    total_chunks: 0,
+                    total_frames: 0,
+                    min_frames: 0,
+                    error_msg: Some(error),
                 }
             }
-        }
-
-        // Store GIF for preview
-        chunk_gifs.push(gif_out.clone());
+        };
+        let chunk_frames = packets.len() as u32;
+        grand_total_frames += chunk_frames;
+        chunk_frame_counts.push(chunk_frames);
 
         // Add GIF to ZIP
         let gif_name = format!("{}_chunk_{}.gif", base_name, chunk_id + 1);
         if zip.start_file(&gif_name, options).is_ok() {
             let _ = zip.write_all(&gif_out);
         }
+        chunk_gifs.push(gif_out);
     }
 
     // Finish ZIP and get the buffer back
@@ -964,5 +970,45 @@ mod tests {
         assert!(decoded.success, "decode failed: {:?}", decoded.error_msg);
         assert_eq!(decoded.filename.as_deref(), Some(filename.as_str()));
         assert_eq!(decoded.file_data.expect("missing file_data"), data);
+    }
+
+    #[test]
+    #[ignore = "manual release-mode generation benchmark"]
+    fn performance_encode_sample() {
+        let mut state = 0x12345678u32;
+        let data: Vec<u8> = (0..256 * 1024)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                state as u8
+            })
+            .collect();
+        for sample in 0..3 {
+            let started = std::time::Instant::now();
+            let result = encode_to_gif(
+                "benchmark.bin".into(),
+                data.clone(),
+                10,
+                "MEDIUM".into(),
+                1200,
+                1.2,
+                false,
+            );
+            let elapsed = started.elapsed();
+            assert!(result.success, "{:?}", result.error_msg);
+            let gif = result.gif_data.unwrap();
+            println!(
+                "PERF sample={sample} elapsed_ms={} frames={} gif_bytes={}",
+                elapsed.as_millis(),
+                result.total_frames,
+                gif.len()
+            );
+            if sample == 0 {
+                if let Ok(path) = std::env::var("AIRQR_PERF_OUTPUT") {
+                    std::fs::write(path, gif).unwrap();
+                }
+            }
+        }
     }
 }

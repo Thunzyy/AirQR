@@ -217,6 +217,18 @@ describe("useScannerDecoderBootstrap", () => {
     expect(mocks.setStatus).toHaveBeenLastCalledWith("Resuming scan");
   });
 
+  it('unlocks the next scan when processing a decoded packet throws', async () => {
+    const { args, handleDecodedData } = createArgs();
+    handleDecodedData.mockImplementationOnce(() => { throw new Error('bad packet'); });
+    renderHook(() => useScannerDecoderBootstrap(args));
+    await waitFor(() => expect(workerRef.current?.onmessage).toBeTypeOf('function'));
+    args.isProcessingFrameRef.current = true;
+    act(() => workerRef.current?.onmessage?.({ data: {
+      type: 'SCAN_RESULT', found: true, binaryData: new Uint8Array([1, 2]).buffer,
+    }}));
+    expect(args.isProcessingFrameRef.current).toBe(false);
+  });
+
   it("ignores scan worker results that do not match the latest request id", async () => {
     const scanRequestIdRef = { current: 3 };
     const { args, handleDecodedData, overlayContext } = createArgs({

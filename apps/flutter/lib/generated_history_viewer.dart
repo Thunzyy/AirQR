@@ -23,6 +23,89 @@ class GeneratedViewerSource {
   });
 }
 
+/// Retains compressed GIFs and their metadata, not every decoded image.
+class GeneratedViewerSourceCache {
+  final int maxBytes;
+  final int maxEntries;
+  final Future<GeneratedViewerSource> Function(String, int?) _loader;
+  final _entries = <String, GeneratedViewerSource>{};
+  final _pending = <String, Future<GeneratedViewerSource>>{};
+  final _versions = <String, String>{};
+
+  GeneratedViewerSourceCache({
+    this.maxBytes = 64 * 1024 * 1024,
+    this.maxEntries = 3,
+    Future<GeneratedViewerSource> Function(String, int?)? loader,
+  }) : _loader =
+           loader ??
+           ((path, count) =>
+               loadGeneratedViewerSource(path, fallbackFrameCount: count));
+
+  int _size(GeneratedViewerSource source) =>
+      source.gifs.fold(0, (bytes, gif) => bytes + gif.lengthInBytes);
+
+  Future<GeneratedViewerSource> load(
+    String path, {
+    int? fallbackFrameCount,
+  }) async {
+    final file = File(path).absolute;
+    final stat = await file.stat();
+    if (stat.type != FileSystemEntityType.file) {
+      final oldKey = _versions.remove(file.path);
+      if (oldKey != null) _entries.remove(oldKey);
+      throw FileSystemException('History file unavailable', path);
+    }
+    final key =
+        '${file.path}:${stat.size}:${stat.modified.microsecondsSinceEpoch}:$fallbackFrameCount';
+    final oldKey = _versions[file.path];
+    if (oldKey != null && oldKey != key) _entries.remove(oldKey);
+    _versions[file.path] = key;
+    final cached = _entries.remove(key);
+    if (cached != null) {
+      _entries[key] = cached;
+      return cached;
+    }
+    final existing = _pending[key];
+    if (existing != null) return existing;
+    late final Future<GeneratedViewerSource> loading;
+    loading = _loader(file.path, fallbackFrameCount)
+        .then((source) {
+          if (identical(_pending[key], loading) &&
+              _versions[file.path] == key) {
+            if (_size(source) <= maxBytes) {
+              _entries[key] = source;
+              var bytes = _entries.values.fold(
+                0,
+                (sum, value) => sum + _size(value),
+              );
+              while (_entries.length > maxEntries || bytes > maxBytes) {
+                final evicted = _entries.keys.first;
+                bytes -= _size(_entries.remove(evicted)!);
+                _versions.removeWhere((_, version) => version == evicted);
+              }
+            }
+          }
+          return source;
+        })
+        .whenComplete(() {
+          if (identical(_pending[key], loading)) _pending.remove(key);
+          if (!_entries.containsKey(key) && _versions[file.path] == key) {
+            _versions.remove(file.path);
+          }
+        });
+    _pending[key] = loading;
+    return loading;
+  }
+
+  void clear() {
+    _entries.clear();
+    _pending.clear();
+    _versions.clear();
+  }
+}
+
+final generatedViewerSourceCache = GeneratedViewerSourceCache();
+
 bool usesGeneratedGifViewer(HistoryItem item) {
   if (item.origin != 'generated') return false;
   final extension = p.extension(item.path).toLowerCase();
@@ -144,6 +227,9 @@ class _GeneratedHistoryViewerPageState
   void didUpdateWidget(covariant GeneratedHistoryViewerPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.item.path != widget.item.path ||
+        oldWidget.item.timestamp != widget.item.timestamp ||
+        oldWidget.item.size != widget.item.size ||
+        oldWidget.item.totalFrames != widget.item.totalFrames ||
         oldWidget.sourceLoader != widget.sourceLoader) {
       _source = _loadSource();
     }
@@ -151,7 +237,7 @@ class _GeneratedHistoryViewerPageState
 
   Future<GeneratedViewerSource> _loadSource() =>
       widget.sourceLoader?.call() ??
-      loadGeneratedViewerSource(
+      generatedViewerSourceCache.load(
         widget.item.path,
         fallbackFrameCount: widget.item.totalFrames,
       );

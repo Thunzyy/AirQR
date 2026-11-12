@@ -976,6 +976,9 @@ describe("HistoryTab", () => {
     ).toHaveLength(1);
     expect(screen.queryByTestId("qr-viewer-actions")).not.toBeInTheDocument();
 
+    const preparations = vi.mocked(URL.createObjectURL).mock.calls.length;
+    const revocations = vi.mocked(URL.revokeObjectURL).mock.calls.length;
+
     fireEvent.keyDown(document, { key: "Escape" });
 
     await waitFor(() => {
@@ -983,6 +986,10 @@ describe("HistoryTab", () => {
         screen.queryByRole("dialog", { name: /clip\.gif/i })
       ).not.toBeInTheDocument();
     });
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(revocations);
+    await act(async () => { await getHistoryProps()?.onView?.(historyItem); });
+    expect(await screen.findByRole('dialog', { name: /clip\.gif/i })).toBeInTheDocument();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(preparations);
   });
 
   it("renders image, video, and PDF transfers in the history preview modal", async () => {

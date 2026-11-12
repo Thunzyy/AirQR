@@ -115,7 +115,7 @@ describe("useScannerFrameLoop", () => {
     globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
   });
 
-  it("posts grayscale frames to the scan worker in worker mode", async () => {
+  it("transfers the original RGBA buffer without a main-thread grayscale pass", async () => {
     const { args, canvasContext, scanWorker, setFps } = createArgs();
 
     const { result } = renderHook(() => useScannerFrameLoop(args));
@@ -128,17 +128,30 @@ describe("useScannerFrameLoop", () => {
     expect(scanWorker.postMessage).toHaveBeenCalledWith(
       {
         type: "SCAN",
-        grayscale: expect.any(Uint8Array),
+        data: expect.any(ArrayBuffer),
         width: 2,
         height: 1,
         tryHarder: true,
       },
       [expect.any(ArrayBuffer)]
     );
-    const posted = scanWorker.postMessage.mock.calls[0]?.[0]?.grayscale as Uint8Array;
-    expect(Array.from(posted)).toEqual([76, 149]);
+    const posted = scanWorker.postMessage.mock.calls[0]?.[0]?.data as ArrayBuffer;
+    expect(posted).toBe(canvasContext.getImageData.mock.results[0]?.value.data.buffer);
+    expect(Array.from(new Uint8Array(posted))).toEqual([255, 0, 0, 255, 0, 255, 0, 255]);
     expect(args.isProcessingFrameRef.current).toBe(true);
     expect(setFps).toHaveBeenCalledWith(1);
+  });
+
+  it.each(['capture', 'transfer'] as const)('unlocks and retries after a %s failure', async (failure) => {
+    const { args, canvasContext, scanWorker } = createArgs();
+    const failing = failure === 'capture' ? canvasContext.getImageData : scanWorker.postMessage;
+    failing.mockImplementationOnce(() => { throw new Error('temporary capture failure'); });
+    const { result } = renderHook(() => useScannerFrameLoop(args));
+    await act(async () => { await result.current.tick(); });
+    expect(args.isProcessingFrameRef.current).toBe(false);
+    await act(async () => { await result.current.tick(); });
+    expect(args.isProcessingFrameRef.current).toBe(true);
+    expect(scanWorker.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'SCAN' }), expect.any(Array));
   });
 
   it("uses BarcodeDetector directly in native mode and decodes the detected payload", async () => {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, waitFor, cleanup, act } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import GifPlayer from "@web/components/media/GifPlayer";
+import { clearGifSourceCache, loadGifSource } from '@web/components/media/gifFrameSource';
 
 const { fetchMock, gifReaderMock, requestAnimationFrameMock, cancelAnimationFrameMock } = vi.hoisted(() => ({
   fetchMock: vi.fn(),
@@ -41,6 +42,7 @@ describe("GifPlayer Component", () => {
     "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
   beforeEach(() => {
+    clearGifSourceCache();
     if (typeof ImageData === "undefined") {
       Object.defineProperty(globalThis, "ImageData", {
         value: class MockImageData {
@@ -80,6 +82,26 @@ describe("GifPlayer Component", () => {
     expect(canvas).toBeInTheDocument();
   });
 
+  it("shows a large GIF after decoding only its requested first frame", async () => {
+    const decode = vi.fn();
+    gifReaderMock.mockImplementationOnce(function () { return {
+      width: 177,
+      height: 177,
+      numFrames: () => 3000,
+      frameInfo: () => ({ delay: 10 }),
+      decodeAndBlitFrameRGBA: decode,
+    }; });
+    const onLoad = vi.fn();
+    const view = await renderGifPlayer({ gifUrl: mockGifUrl, isPlaying: false, onLoad });
+    await waitFor(() => expect(onLoad).toHaveBeenCalled());
+    expect(decode).toHaveBeenCalledTimes(1);
+    expect(onLoad).toHaveBeenCalledWith(expect.objectContaining({ totalFrames: 3000 }));
+    view.rerender(<GifPlayer gifUrl={mockGifUrl} isPlaying={false} seekFrame={2999} />);
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(2));
+    view.rerender(<GifPlayer gifUrl={mockGifUrl} isPlaying={false} seekFrame={0} />);
+    expect(decode).toHaveBeenCalledTimes(2);
+  });
+
   it("applies the className prop", async () => {
     const { container } = await renderGifPlayer({
       gifUrl: mockGifUrl,
@@ -87,6 +109,17 @@ describe("GifPlayer Component", () => {
     });
     const canvas = container.querySelector("canvas");
     expect(canvas).toHaveClass("test-class");
+  });
+
+  it('reuses a previously opened GIF and bounds the decoded frame cache', async () => {
+    const first = await renderGifPlayer({ gifUrl: mockGifUrl, isPlaying: false });
+    await waitFor(() => expect(first.container.querySelector('canvas')?.width).toBe(100));
+    first.unmount();
+    await renderGifPlayer({ gifUrl: mockGifUrl, isPlaying: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const source = await loadGifSource(mockGifUrl);
+    for (let index = 0; index < 10; index++) source.getFrame(index);
+    expect(source.decodedByteLength).toBeLessThanOrEqual(8 * 100 * 100 * 4);
   });
 
   it("applies pixelated image rendering style", async () => {

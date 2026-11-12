@@ -215,9 +215,6 @@ export function useScannerDecoderBootstrap({
             return;
           }
 
-          const overlay = overlayRef.current;
-          const ctx = overlay?.getContext("2d");
-
           if (
             scanRequestIdRef &&
             scanRequestIdRef.current > 0 &&
@@ -228,33 +225,44 @@ export function useScannerDecoderBootstrap({
             return;
           }
 
-          if (overlay && ctx) {
-            ctx.clearRect(0, 0, overlay.width, overlay.height);
+          try {
+            const overlay = overlayRef.current;
+            const ctx = overlay?.getContext("2d");
+            if (overlay && ctx) {
+              ctx.clearRect(0, 0, overlay.width, overlay.height);
 
-            if (message.found && message.location) {
-              ctx.beginPath();
-              ctx.lineWidth = 4;
-              ctx.strokeStyle = "#00FF00";
-              ctx.moveTo(message.location.topLeftCorner.x, message.location.topLeftCorner.y);
-              ctx.lineTo(message.location.topRightCorner.x, message.location.topRightCorner.y);
-              ctx.lineTo(
-                message.location.bottomRightCorner.x,
-                message.location.bottomRightCorner.y
-              );
-              ctx.lineTo(
-                message.location.bottomLeftCorner.x,
-                message.location.bottomLeftCorner.y
-              );
-              ctx.lineTo(message.location.topLeftCorner.x, message.location.topLeftCorner.y);
-              ctx.stroke();
+              if (message.found && message.location) {
+                ctx.beginPath();
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = "#00FF00";
+                ctx.moveTo(message.location.topLeftCorner.x, message.location.topLeftCorner.y);
+                ctx.lineTo(message.location.topRightCorner.x, message.location.topRightCorner.y);
+                ctx.lineTo(
+                  message.location.bottomRightCorner.x,
+                  message.location.bottomRightCorner.y
+                );
+                ctx.lineTo(
+                  message.location.bottomLeftCorner.x,
+                  message.location.bottomLeftCorner.y
+                );
+                ctx.lineTo(message.location.topLeftCorner.x, message.location.topLeftCorner.y);
+                ctx.stroke();
+              }
+            }
+
+            if (message.found && message.binaryData) {
+              handleDecodedData(toPacketBytes(message.binaryData));
+            }
+          } catch (error) {
+            logger.warn("Decoded packet could not be processed", {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          } finally {
+            if (!scanRequestIdRef || scanRequestIdRef.current === 0 ||
+                message.requestId === scanRequestIdRef.current) {
+              isProcessingFrameRef.current = false;
             }
           }
-
-          if (message.found && message.binaryData) {
-            handleDecodedData(toPacketBytes(message.binaryData));
-          }
-
-          isProcessingFrameRef.current = false;
         };
 
         worker.onerror = (err) => {

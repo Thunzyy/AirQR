@@ -7,6 +7,8 @@ import { useLocation } from 'wouter';
 import { useTranslation } from 'react-i18next';
 import History, { type HistoryServerTotals } from '../../features/history/History';
 import QrGifViewer from '../media/QrGifViewer';
+import { disposeHistoryPreview, historyPreviewKey, prepareHistoryPreview, type PreparedHistoryPreview } from '../media/historyPreviewSource';
+import { PreviewCache } from '../../utils/previewCache';
 import { useHistoryStore, useSettingsStore, useToastStore } from '../../store';
 import {
   buildBulkDownloadArchiveEntries,
@@ -20,7 +22,7 @@ import {
 } from '../../utils/history';
 import { asWireObject, asWireString, type WireValue } from '../../parse/wire';
 import { formatDateCategory, formatSize, formatScanDisplayName } from '../../utils/format';
-import { unzipFilesInWorker, zipFilesInWorker } from '../../utils/zipWorker';
+import { zipFilesInWorker } from '../../utils/zipWorker';
 import { ServerFileNotFoundError } from '../../services/serverErrors';
 import Icon from '../ui/Icon';
 import { useConfirmDialog } from '../ui/useConfirmDialog';
@@ -87,7 +89,6 @@ import {
   toBinaryBlob,
   toUint8Array,
 } from '../../utils/binaryData';
-import { decodeNoteContent } from '../../utils/noteDetection';
 import {
   countPacketPages,
   getLegacyPacketPages,
@@ -206,6 +207,11 @@ const HistoryTab: React.FC = () => {
     noteContent?: string;
   } | null>(null);
   const [historyPreviewChunks, setHistoryPreviewChunks] = useState<string[]>([]);
+  const [previewCache] = useState(() => new PreviewCache<PreparedHistoryPreview>(
+    (preview) => preview.byteLength, disposeHistoryPreview,
+  ));
+  const previewLeaseRef = useRef<{ release: () => void } | null>(null);
+  const previewRequestRef = useRef(0);
   const [isOpeningMultiView, setIsOpeningMultiView] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const manualSyncIdsRef = useRef(new Set<string>());
@@ -1183,21 +1189,31 @@ const HistoryTab: React.FC = () => {
     updateIncompleteScan,
   });
 
+  const releasePreview = useCallback(() => {
+    previewRequestRef.current++;
+    previewLeaseRef.current?.release();
+    previewLeaseRef.current = null;
+  }, []);
+
   const cleanupPreview = useCallback(() => {
-    if (historyPreview?.gifUrl) {
-      URL.revokeObjectURL(historyPreview.gifUrl);
-    }
-    if (
-      historyPreview?.previewUrl &&
-      historyPreview.previewUrl !== historyPreview.gifUrl
-    ) {
-      URL.revokeObjectURL(historyPreview.previewUrl);
-    }
-    historyPreviewChunks.forEach((url) => URL.revokeObjectURL(url));
+    releasePreview();
     setHistoryPreviewChunks([]);
     setHistoryPreview(null);
     setIsOpeningMultiView(false);
-  }, [historyPreview, historyPreviewChunks]);
+  }, [releasePreview]);
+
+  useEffect(() => {
+    previewCache.retainKeys(new Set([...items, ...remoteItems].map(historyPreviewKey)));
+  }, [items, remoteItems, previewCache]);
+
+  useEffect(() => {
+    cleanupPreview();
+    return () => {
+      releasePreview();
+      previewCache.clear();
+    };
+  }, [cleanupPreview, releasePreview, previewCache, uploadConfig.url, uploadConfig.enabled, uploadConfig.username,
+    uploadConfig.password, uploadConfig.apiKey]);
 
   useEffect(() => {
     if (!historyPreview) {
@@ -1458,6 +1474,7 @@ const HistoryTab: React.FC = () => {
   }, []);
 
   const handleDelete = (item: HistoryItem) => {
+    previewCache.invalidate(historyPreviewKey(item));
     const allowServerDelete = !item.isLocalOnly && (item.source === 'server' || item.isSynced);
 
     if (allowServerDelete) {
@@ -2041,6 +2058,7 @@ const HistoryTab: React.FC = () => {
     }
 
     setIsClearingHistory(true);
+    previewCache.clear();
 
     try {
       if (canDeleteRemoteHistory) {
@@ -2099,98 +2117,35 @@ const HistoryTab: React.FC = () => {
     } finally {
       setIsClearingHistory(false);
     }
-  }, [clearHistoryState, confirm, showToast, t]);
+  }, [clearHistoryState, confirm, previewCache, showToast, t]);
 
   const handleView = async (item: HistoryItem) => {
-    const result = await resolveHistoryItemData(item);
-    if (result.status === 'deleted-on-server') {
-      // Already removed locally, with its own message.
-      return;
-    }
-    const resolved = result.status === 'ok' ? result.item : null;
-    if (!resolved?.fileData) {
-      logger.warn('History item data not found for preview', {
-        itemId: item.id,
-        source: item.source,
+    const request = ++previewRequestRef.current;
+    try {
+      const lease = await previewCache.acquire(historyPreviewKey(item), async () => {
+        const result = await resolveHistoryItemData(item);
+        if (result.status === 'deleted-on-server') {
+          throw new DOMException('History item deleted', 'AbortError');
+        }
+        if (result.status !== 'ok' || !result.item.fileData) {
+          throw new Error('History data unavailable');
+        }
+        return prepareHistoryPreview(result.item);
       });
-      showToast(t('history.previewLoadFailed'), 'error');
-      return;
-    }
-
-    if (historyPreview) {
+      if (request !== previewRequestRef.current) {
+        lease.release();
+        return;
+      }
       cleanupPreview();
+      previewLeaseRef.current = lease;
+      setHistoryPreviewChunks(lease.value.chunks);
+      setHistoryPreview(lease.value);
+    } catch (error) {
+      if (request !== previewRequestRef.current ||
+          (error instanceof DOMException && error.name === 'AbortError')) return;
+      logger.warn('History preview failed', { itemId: item.id });
+      showToast(t('history.previewLoadFailed'), 'error');
     }
-
-    const mimeType = resolved.mimeType || 'application/octet-stream';
-    const previewKind = resolveHistoryPreviewKind(resolved);
-
-    if (previewKind === 'text') {
-      try {
-        const textBytes = await toUint8Array(resolved.fileData);
-        setHistoryPreview({
-          item: resolved,
-          kind: previewKind,
-          noteContent: decodeNoteContent(textBytes),
-        });
-      } catch (error) {
-        logger.error('Failed to decode text note preview', { error: error instanceof Error ? error.message : String(error) });
-      }
-      return;
-    }
-
-    if (previewKind === 'zip') {
-      try {
-        const gifUrls: string[] = [];
-        const zipBytes = await toUint8Array(resolved.fileData);
-        const entries = await unzipFilesInWorker(zipBytes, {
-          filterExt: '.gif',
-          transfer: false,
-        });
-        const gifFiles = entries.sort((a, b) =>
-          a.name.localeCompare(b.name, undefined, { numeric: true })
-        );
-
-        for (const entry of gifFiles) {
-          const blob = new Blob([new Uint8Array(entry.data)], { type: 'image/gif' });
-          gifUrls.push(URL.createObjectURL(blob));
-        }
-
-        if (gifUrls.length > 0) {
-          setHistoryPreviewChunks(gifUrls);
-          setHistoryPreview({
-            item: resolved,
-            kind: previewKind,
-            gifUrl: gifUrls[0],
-          });
-        } else {
-          setHistoryPreview({ item: resolved, kind: previewKind });
-        }
-      } catch (error) {
-        logger.error('Failed to extract ZIP', { error: error instanceof Error ? error.message : String(error) });
-        setHistoryPreview({ item: resolved, kind: previewKind });
-      }
-      return;
-    }
-
-    if (previewKind === 'qr-gif') {
-      const blob = toBinaryBlob(resolved.fileData, 'image/gif');
-      const url = URL.createObjectURL(blob);
-      setHistoryPreview({ item: resolved, kind: previewKind, gifUrl: url });
-      return;
-    }
-
-    if (previewKind === 'image' || previewKind === 'video' || previewKind === 'pdf') {
-      const blob = toBinaryBlob(resolved.fileData, mimeType);
-      const url = URL.createObjectURL(blob);
-      setHistoryPreview({
-        item: resolved,
-        kind: previewKind,
-        previewUrl: url,
-      });
-      return;
-    }
-
-    setHistoryPreview({ item: resolved, kind: 'unsupported' });
   };
 
   const [noteCopied, setNoteCopied] = useState(false);

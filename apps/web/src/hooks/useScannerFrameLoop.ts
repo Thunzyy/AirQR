@@ -151,34 +151,32 @@ export function useScannerFrameLoop({
       return;
     }
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const rgba = imageData.data;
-    const grayscale = new Uint8Array(canvas.width * canvas.height);
-    for (let rgbaIndex = 0, grayIndex = 0; rgbaIndex < rgba.length; rgbaIndex += 4, grayIndex += 1) {
-      grayscale[grayIndex] =
-        (77 * rgba[rgbaIndex] + 150 * rgba[rgbaIndex + 1] + 29 * rgba[rgbaIndex + 2]) >> 8;
+    try {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const worker = scanWorkerRef.current;
+      if (!worker) throw new Error("Scan worker unavailable");
+      const requestId = scanRequestIdRef ? ++scanRequestIdRef.current : undefined;
+      const data = imageData.data.buffer;
+      if (!(data instanceof ArrayBuffer)) throw new Error('Camera buffer is not transferable');
+      const request: ScanWorkerRequest = {
+        type: "SCAN", data,
+        width: canvas.width, height: canvas.height,
+        tryHarder: scannerConfig.tryHarder,
+      };
+      if (requestId !== undefined) request.requestId = requestId;
+      // ImageData already owns RGBA bytes. Transfer them; ZXing handles luminance
+      // in the worker, avoiding RGBA -> gray -> RGBA copies on every frame.
+      worker.postMessage(request, [data]);
+    } catch (error) {
+      if ((resetGenerationRef?.current ?? frameGeneration) === frameGeneration) {
+        isProcessingFrameRef.current = false;
+      }
+      logger.warn("Camera frame could not be submitted", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
-    const requestId =
-      scanRequestIdRef ? scanRequestIdRef.current + 1 : undefined;
-    if (scanRequestIdRef && requestId !== undefined) {
-      scanRequestIdRef.current = requestId;
-    }
-
-    const request: ScanWorkerRequest = {
-      type: "SCAN",
-      grayscale,
-      width: canvas.width,
-      height: canvas.height,
-      tryHarder: scannerConfig.tryHarder,
-    };
-    if (requestId !== undefined) {
-      request.requestId = requestId;
-    }
-
-    scanWorkerRef.current?.postMessage(request, [grayscale.buffer]);
   }, [
     barcodeDetectorRef,
     canvasRef,

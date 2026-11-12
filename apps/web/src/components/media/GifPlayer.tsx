@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { GifReader } from "omggif";
+import { loadGifSource, type GifFrameSource } from './gifFrameSource';
 
 interface GifPlayerProps {
   gifUrl: string;
@@ -49,10 +49,8 @@ const GifPlayer: React.FC<GifPlayerProps> = ({
   const [error, setError] = useState<string | null>(null);
   const requestRef = useRef<number>(0);
   const startTimeRef = useRef<number>(0);
-  const framesRef = useRef<ImageData[]>([]);
-  const frameDelaysRef = useRef<number[]>([]);
+  const sourceRef = useRef<GifFrameSource | null>(null);
   const currentFrameRef = useRef<number>(0);
-  const gifReaderRef = useRef<GifReader | null>(null);
   const isPlayingRef = useRef(isPlaying !== false);
   const playbackFpsRef = useRef<number | null | undefined>(playbackFps);
   const seekFrameRef = useRef<number | null | undefined>(seekFrame);
@@ -70,13 +68,14 @@ const GifPlayer: React.FC<GifPlayerProps> = ({
   onLoopRef.current = onLoop;
 
   const renderFrame = useCallback((frameIndex: number) => {
-    const totalFrames = framesRef.current.length;
+    const source = sourceRef.current;
+    const totalFrames = source?.frameCount ?? 0;
     if (totalFrames === 0) return null;
 
     const renderedFrame = clampFrame(frameIndex, totalFrames);
     const ctx = canvasRef.current?.getContext("2d");
     if (ctx) {
-      ctx.putImageData(framesRef.current[renderedFrame], 0, 0);
+      ctx.putImageData(source!.getFrame(renderedFrame), 0, 0);
     }
 
     if (onFrameChangeRef.current) {
@@ -87,7 +86,7 @@ const GifPlayer: React.FC<GifPlayerProps> = ({
   }, []);
 
   useEffect(() => {
-    if (seekFrame === null || seekFrame === undefined || framesRef.current.length === 0) {
+    if (seekFrame === null || seekFrame === undefined || !sourceRef.current) {
       return;
     }
 
@@ -95,7 +94,7 @@ const GifPlayer: React.FC<GifPlayerProps> = ({
     if (renderedFrame !== null) {
       currentFrameRef.current = getNextFrame(
         renderedFrame,
-        framesRef.current.length
+        sourceRef.current.frameCount
       );
     }
     startTimeRef.current = performance.now();
@@ -106,36 +105,11 @@ const GifPlayer: React.FC<GifPlayerProps> = ({
 
     const loadGif = async () => {
       try {
-        const response = await fetch(gifUrl);
-        const buffer = await response.arrayBuffer();
-        const array = new Uint8Array(buffer);
-
-        // Parse GIF
-        const reader = new GifReader(array);
-        gifReaderRef.current = reader;
-
-        const width = reader.width;
-        const height = reader.height;
-        const frameCount = reader.numFrames();
-
-        const frames: ImageData[] = [];
-        const delays: number[] = [];
-        let totalDuration = 0;
-
-        // Decode all frames
-        for (let i = 0; i < frameCount; i++) {
-          const frameInfo = reader.frameInfo(i);
-          const delay = frameInfo.delay * 10;
-          delays.push(delay); // delay is in 1/100th of a sec, convert to ms
-          totalDuration += delay;
-
-          const imageData = new ImageData(width, height);
-          reader.decodeAndBlitFrameRGBA(i, imageData.data);
-          frames.push(imageData);
-        }
-
+        setError(null);
+        const source = await loadGifSource(gifUrl);
         if (!isMounted) return;
-
+        const { width, height, frameCount } = source;
+        sourceRef.current = source;
         setDimensions({ width, height });
 
         if (onLoad) {
@@ -143,12 +117,9 @@ const GifPlayer: React.FC<GifPlayerProps> = ({
             totalFrames: frameCount,
             width,
             height,
-            duration: totalDuration,
+            duration: source.duration,
           });
         }
-
-        framesRef.current = frames;
-        frameDelaysRef.current = delays;
 
         // Set canvas size
         if (canvasRef.current) {
@@ -159,13 +130,13 @@ const GifPlayer: React.FC<GifPlayerProps> = ({
         let renderedFrame = renderFrame(0);
         const requestedFrame = seekFrameRef.current;
         if (requestedFrame !== null && requestedFrame !== undefined) {
-          const clampedFrame = clampFrame(requestedFrame, frames.length);
+          const clampedFrame = clampFrame(requestedFrame, frameCount);
           if (clampedFrame !== 0) {
             renderedFrame = renderFrame(clampedFrame);
           }
         }
         if (renderedFrame !== null) {
-          currentFrameRef.current = getNextFrame(renderedFrame, frames.length);
+          currentFrameRef.current = getNextFrame(renderedFrame, frameCount);
         }
 
         startTimeRef.current = performance.now();
@@ -183,6 +154,7 @@ const GifPlayer: React.FC<GifPlayerProps> = ({
     return () => {
       isMounted = false;
       cancelAnimationFrame(requestRef.current);
+      sourceRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gifUrl]);
@@ -193,11 +165,12 @@ const GifPlayer: React.FC<GifPlayerProps> = ({
       return 1000 / fps;
     }
 
-    return frameDelaysRef.current[frameIndex] ?? 0;
+    return sourceRef.current?.delays[frameIndex] ?? 0;
   };
 
   const animate = (time: number) => {
-    if (framesRef.current.length === 0) {
+    const frameCount = sourceRef.current?.frameCount ?? 0;
+    if (frameCount === 0) {
       requestRef.current = requestAnimationFrame(animate);
       return;
     }
@@ -214,9 +187,9 @@ const GifPlayer: React.FC<GifPlayerProps> = ({
 
     if (elapsed >= delay) {
       renderFrame(frameIndex);
-      const nextFrame = (frameIndex + 1) % framesRef.current.length;
+      const nextFrame = (frameIndex + 1) % frameCount;
 
-      if (nextFrame === 0 && framesRef.current.length > 1 && onLoopRef.current) {
+      if (nextFrame === 0 && frameCount > 1 && onLoopRef.current) {
         onLoopRef.current();
       }
 
