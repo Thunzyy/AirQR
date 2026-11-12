@@ -37,10 +37,23 @@ jobs:
           lipo "$app/Contents/MacOS/AirQR" -archs
           codesign --force --deep --sign - --entitlements macos/Runner/Release.entitlements "$app"
           codesign --verify --deep --strict "$app"
+          probe=build/macos/KeychainSmoke.app
+          mkdir -p "$probe/Contents/MacOS"
+          swiftc ../../tests/native/macos_keychain_smoke.swift -o "$probe/Contents/MacOS/KeychainSmoke"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string fr.pgnrd.airqr.keychain-smoke' "$probe/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleExecutable string KeychainSmoke' "$probe/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundlePackageType string APPL' "$probe/Contents/Info.plist"
+          codesign --force --sign - --entitlements macos/Runner/Release.entitlements "$probe"
+          "$probe/Contents/MacOS/KeychainSmoke" > macos-keychain.log 2>&1
+          cat macos-keychain.log
           "$app/Contents/MacOS/AirQR" > macos-launch.log 2>&1 &
           app_pid=$!
           sleep 10
-          kill -0 "$app_pid"
+          if ! kill -0 "$app_pid"; then
+            cat macos-launch.log
+            /usr/bin/log show --last 2m --style compact --predicate 'process == "amfid" OR process == "AirQR"' || true
+            exit 1
+          fi
           screencapture -x macos-launch.png || true
           kill "$app_pid"
           mkdir -p build/macos/package
@@ -53,5 +66,12 @@ jobs:
           path: |
             apps/flutter/build/macos/package/AirQR-macos-universal.zip
             apps/flutter/macos-launch.log
+            apps/flutter/macos-keychain.log
             apps/flutter/macos-launch.png
           if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: airqr-macos-diagnostics
+          path: apps/flutter/macos-*.log
+          if-no-files-found: ignore

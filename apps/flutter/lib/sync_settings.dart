@@ -93,7 +93,12 @@ class SyncSettings {
 class SyncSettingsService {
   static const String _key = 'airqr_sync_settings';
   static const String _securePasswordKey = 'airqr_sync_password';
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  // Direct macOS downloads use ad-hoc signing without a provisioning profile.
+  // The encrypted login keychain supports that distribution model; the data
+  // protection keychain requires a provisioned access-group entitlement.
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
+    mOptions: MacOsOptions(useDataProtectionKeyChain: false),
+  );
 
   static Future<SyncSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
