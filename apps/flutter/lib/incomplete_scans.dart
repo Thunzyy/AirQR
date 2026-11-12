@@ -10,6 +10,7 @@ import 'server_id.dart';
 import 'sync_service.dart';
 import 'sync_settings.dart';
 import 'parse/wire.dart';
+import 'scan_persistence_queue.dart';
 
 String? normalizeScanFilename(String? filename) {
   if (filename == null) return null;
@@ -479,12 +480,186 @@ class IncompleteScan {
   }
 }
 
-/// Service for managing incomplete scans
+class _PendingScanPacket {
+  final Uint8List bytes;
+  final double progress;
+  final int receivedPackets;
+  final int expectedPackets;
+  final String? filename;
+
+  _PendingScanPacket({
+    required Uint8List bytes,
+    required this.progress,
+    required this.receivedPackets,
+    required this.expectedPackets,
+    this.filename,
+  }) : bytes = Uint8List.fromList(bytes);
+}
+
+/// Service for managing incomplete scans and their bounded persistence queue.
 class IncompleteScanService {
   static const String _key = 'airqr_incomplete_scans';
   static const int _packetUploadMaxAttempts = 4;
   static const int _packetUploadBaseDelayMs = 250;
   static String? _currentScanId;
+  static int _sessionEpoch = 0;
+  static final _persistence =
+      <String, ScanPersistenceQueue<_PendingScanPacket>>{};
+  static final _sessionMutations = <String, Future<void>>{};
+  static final persistenceError = ValueNotifier<String?>(null);
+  static String? _errorSessionId;
+  @visibleForTesting
+  static VoidCallback? onMetadataSavedForTesting;
+
+  static void _reportPersistenceError(String id, Object? error) {
+    if (error == null) {
+      if (_errorSessionId == id) {
+        _errorSessionId = null;
+        persistenceError.value = null;
+      }
+    } else {
+      _errorSessionId = id;
+      persistenceError.value = 'Unable to save scan: $error';
+    }
+  }
+
+  /// Wait only when the bounded backlog is full, before decoding another frame.
+  static Future<void> waitForPacketCapacity(int bytes) async {
+    await _sessionMutations[_currentScanId];
+    await _persistence[_currentScanId]?.waitForCapacity(bytes);
+  }
+
+  static Future<void> _withSessionMutation(
+    String id,
+    Future<void> Function() action,
+  ) async {
+    final previous = _sessionMutations[id];
+    final done = Completer<void>();
+    _sessionMutations[id] = done.future;
+    try {
+      await previous;
+      await action();
+    } finally {
+      done.complete();
+      if (identical(_sessionMutations[id], done.future)) {
+        _sessionMutations.remove(id);
+      }
+    }
+  }
+
+  /// Acknowledges admission, not disk durability. Lifecycle boundaries flush.
+  static Future<void> recordProgressPacket({
+    required String sessionId,
+    required Uint8List packetData,
+    required double progress,
+    required int receivedPackets,
+    required int expectedPackets,
+    String? filename,
+  }) async {
+    final epoch = _sessionEpoch;
+    await _sessionMutations[sessionId];
+    if (epoch != _sessionEpoch) return;
+    if (_currentScanId != sessionId || receivedPackets < 0) return;
+    final queue = _persistence.putIfAbsent(
+      sessionId,
+      () => ScanPersistenceQueue(
+        sizeOf: (_PendingScanPacket record) => record.bytes.lengthInBytes,
+        writeBatch: (batch) => _writeProgressBatch(sessionId, batch),
+        onError: (error) => _reportPersistenceError(sessionId, error),
+      ),
+    );
+    await queue.add(
+      _PendingScanPacket(
+        bytes: packetData,
+        progress: progress,
+        receivedPackets: receivedPackets,
+        expectedPackets: expectedPackets,
+        filename: filename,
+      ),
+    );
+  }
+
+  static Future<void> flushPending({String? sessionId}) async {
+    final entries = _persistence.entries.toList(growable: false);
+    for (final entry in entries) {
+      if (sessionId != null && entry.key != sessionId) continue;
+      await entry.value.flush();
+      if (entry.value.isClosed &&
+          identical(_persistence[entry.key], entry.value)) {
+        _persistence.remove(entry.key);
+      }
+    }
+  }
+
+  static Future<void> _closePersistence() async {
+    for (final entry in _persistence.entries.toList(growable: false)) {
+      await entry.value.close();
+      if (identical(_persistence[entry.key], entry.value)) {
+        _persistence.remove(entry.key);
+      }
+    }
+  }
+
+  static Future<void> _discardPersistence(String id) async {
+    final queue = _persistence.remove(id);
+    await queue?.discard();
+    _reportPersistenceError(id, null);
+  }
+
+  static Future<void> _writeProgressBatch(
+    String id,
+    List<_PendingScanPacket> batch,
+  ) async {
+    final serverId = ServerId.tryParse(id)!;
+    final lockDirectory = await _packetsDirectoryFor(
+      serverId,
+      createRoot: false,
+    );
+    if (lockDirectory == null) {
+      throw FileSystemException('Unsafe scan directory', id);
+    }
+    await _withPacketSessionLock<void>(
+      _packetSessionLockKey(lockDirectory),
+      () async {
+        final dir = await _packetsDirectoryFor(serverId, createRoot: false);
+        if (dir == null || !await dir.exists()) {
+          throw FileSystemException('Scan directory unavailable', id);
+        }
+        for (final packet in batch) {
+          final written = await _writePacketFileLocked(
+            dir,
+            packet.receivedPackets,
+            packet.bytes,
+          );
+          if (!written) {
+            // A retry can encounter already committed immutable packets.
+            final existing = await _packetFileFor(
+              dir,
+              packet.receivedPackets,
+              allowMissing: false,
+            );
+            if (existing == null) {
+              throw FileSystemException('Packet could not be committed', id);
+            }
+          }
+        }
+      },
+    );
+    // Publish only after every packet in this batch is durable. The latest
+    // snapshot replaces up to 16 full-history JSON writes with one.
+    final latest = batch.last;
+    final filename = batch.reversed
+        .map((packet) => normalizeScanFilename(packet.filename))
+        .whereType<String>()
+        .firstOrNull;
+    await _updateProgressForSession(
+      id,
+      progress: latest.progress,
+      receivedPackets: latest.receivedPackets,
+      expectedPackets: latest.expectedPackets,
+      filename: filename,
+    );
+  }
 
   @visibleForTesting
   static void setPacketFileWriterForTesting(PacketFileWriter? writer) {
@@ -498,6 +673,11 @@ class IncompleteScanService {
 
   /// Get all incomplete scans (local only)
   static Future<List<IncompleteScan>> getAll() async {
+    await flushPending();
+    return _readAll();
+  }
+
+  static Future<List<IncompleteScan>> _readAll() async {
     final prefs = await SharedPreferences.getInstance();
     final String? jsonString = prefs.getString(_key);
     if (jsonString == null) return [];
@@ -726,20 +906,48 @@ class IncompleteScanService {
     // Keep non-streaming IDs consistent with web app (milliseconds timestamp as string).
     final generatedId = ServerId.tryFromPositiveInt(timestamp)!;
     final serverId = ServerId.tryParse(sessionId) ?? generatedId;
-    _currentScanId = serverId.value;
-    debugPrint('🆕 SCAN_LOG: startNewSession created $_currentScanId');
-
-    final dir = await _packetsDirectoryFor(serverId, createRoot: true);
-    if (dir == null) {
-      if (_currentScanId == serverId.value) _currentScanId = null;
-      throw FileSystemException(
-        'Unsafe incomplete scan directory',
-        serverId.value,
-      );
-    }
-    await dir.create(recursive: true);
-
+    await _activateSession(serverId);
     return serverId.value;
+  }
+
+  static Future<void> _activateSession(ServerId serverId) async {
+    final epoch = ++_sessionEpoch;
+    _currentScanId = null;
+    await _sessionMutations[serverId.value];
+    await _withPacketSessionLock<void>('active-scan-session', () async {
+      await _closePersistence();
+      final dir = await _packetsDirectoryFor(serverId, createRoot: true);
+      if (dir == null) {
+        throw FileSystemException(
+          'Unsafe incomplete scan directory',
+          serverId.value,
+        );
+      }
+      await dir.create(recursive: true);
+      if (epoch != _sessionEpoch) throw StateError('Scan session changed');
+      // Make the session discoverable even if the process stops after packet
+      // commit but before a later batched metadata update.
+      await _withPacketSessionLock<void>('incomplete-scan-metadata', () async {
+        final list = await _readAll();
+        if (!list.any((scan) => scan.id == serverId.value)) {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          list.insert(
+            0,
+            IncompleteScan(
+              id: serverId.value,
+              startTimestamp: now,
+              lastUpdateTimestamp: now,
+              progress: 0,
+              receivedPackets: 0,
+              expectedPackets: 0,
+            ),
+          );
+          await _save(list);
+        }
+      });
+      if (epoch != _sessionEpoch) throw StateError('Scan session changed');
+      _currentScanId = serverId.value;
+    });
   }
 
   /// Save a packet for the current scan session
@@ -784,9 +992,26 @@ class IncompleteScanService {
   }) async {
     final currentScanId = _currentScanId;
     if (currentScanId == null) return;
+    await _updateProgressForSession(
+      currentScanId,
+      progress: progress,
+      receivedPackets: receivedPackets,
+      expectedPackets: expectedPackets,
+      filename: filename,
+      requireCurrent: true,
+    );
+  }
 
-    final list = await getAll();
-    if (_currentScanId != currentScanId) return;
+  static Future<void> _updateProgressForSession(
+    String currentScanId, {
+    required double progress,
+    required int receivedPackets,
+    required int expectedPackets,
+    String? filename,
+    bool requireCurrent = false,
+  }) => _withPacketSessionLock<void>('incomplete-scan-metadata', () async {
+    final list = await _readAll();
+    if (requireCurrent && _currentScanId != currentScanId) return;
     final timestamp = DateTime.now().millisecondsSinceEpoch;
 
     final existingScan = list.firstWhere(
@@ -822,12 +1047,13 @@ class IncompleteScanService {
     );
 
     await _save(list);
-  }
+  });
 
   /// Get all saved packets for a scan session
   static Future<List<Uint8List>> getPackets(String scanId) async {
     final serverId = ServerId.tryParse(scanId);
     if (serverId == null) return [];
+    await flushPending(sessionId: serverId.value);
     final dir = await _packetsDirectoryFor(serverId, createRoot: false);
     if (dir == null) return [];
 
@@ -875,10 +1101,7 @@ class IncompleteScanService {
     final serverId = ServerId.tryParse(scanId);
     if (serverId == null) return;
     try {
-      final dir = await _packetsDirectoryFor(serverId, createRoot: true);
-      if (dir == null) return;
-      await dir.create(recursive: true);
-      _currentScanId = serverId.value;
+      await _activateSession(serverId);
     } catch (e) {
       debugPrint(
         '⚠️ SCAN_LOG: resumeSession failed to prepare packet dir for $scanId: $e',
@@ -889,6 +1112,7 @@ class IncompleteScanService {
   /// Complete the current scan (remove from incomplete list)
   static Future<void> completeCurrentScan() async {
     final currentScanId = _currentScanId;
+    final epoch = _sessionEpoch;
     debugPrint(
       '🏁 SCAN_LOG: completeCurrentScan called, _currentScanId=$_currentScanId',
     );
@@ -900,9 +1124,13 @@ class IncompleteScanService {
     debugPrint(
       '🏁 SCAN_LOG: Removing scan $_currentScanId from incomplete list',
     );
+    await flushPending(sessionId: currentScanId);
+    if (epoch != _sessionEpoch) return;
     await remove(currentScanId);
     debugPrint('🏁 SCAN_LOG: Scan removed, setting _currentScanId to null');
-    if (_currentScanId == currentScanId) _currentScanId = null;
+    if (epoch == _sessionEpoch && _currentScanId == currentScanId) {
+      _currentScanId = null;
+    }
   }
 
   /// Remove an incomplete scan
@@ -910,33 +1138,46 @@ class IncompleteScanService {
     debugPrint('🗑️ SCAN_LOG: remove($scanId) called');
     final serverId = ServerId.tryParse(scanId);
     if (serverId == null) return;
-    final list = await getAll();
-    debugPrint(
-      '🗑️ SCAN_LOG: Current incomplete scans: ${list.map((s) => s.id).toList()}',
-    );
-    final beforeCount = list.length;
-    list.removeWhere((s) => s.id == serverId.value);
-    debugPrint(
-      '🗑️ SCAN_LOG: Removed ${beforeCount - list.length} scans, remaining: ${list.length}',
-    );
-    await _save(list);
+    if (_currentScanId == serverId.value) clearCurrentScan();
+    await _withSessionMutation(serverId.value, () async {
+      await _withPacketSessionLock<void>('active-scan-session', () async {
+        await _discardPersistence(serverId.value);
+        await _withPacketSessionLock<
+          void
+        >('incomplete-scan-metadata', () async {
+          final list = await _readAll();
+          debugPrint(
+            '🗑️ SCAN_LOG: Current incomplete scans: ${list.map((s) => s.id).toList()}',
+          );
+          final beforeCount = list.length;
+          list.removeWhere((s) => s.id == serverId.value);
+          debugPrint(
+            '🗑️ SCAN_LOG: Removed ${beforeCount - list.length} scans, remaining: ${list.length}',
+          );
+          await _save(list);
+        });
 
-    // Delete the packets directory
-    final dir = await _packetsDirectoryFor(serverId, createRoot: false);
-    if (dir == null) return;
-    await _withPacketSessionLock<void>(_packetSessionLockKey(dir), () async {
-      if (_currentScanId == serverId.value) _currentScanId = null;
-      final validatedDir = await _packetsDirectoryFor(
-        serverId,
-        createRoot: false,
-      );
-      if (validatedDir == null || !await validatedDir.exists()) return;
-      if (!await _containsOnlySafePacketChildren(validatedDir)) return;
-      debugPrint(
-        '🗑️ SCAN_LOG: Deleting packets directory: ${validatedDir.path}',
-      );
-      await validatedDir.delete(recursive: true);
-      await _packetSessionHook?.call('remove');
+        // Delete the packets directory
+        final dir = await _packetsDirectoryFor(serverId, createRoot: false);
+        if (dir == null) return;
+        await _withPacketSessionLock<void>(
+          _packetSessionLockKey(dir),
+          () async {
+            if (_currentScanId == serverId.value) _currentScanId = null;
+            final validatedDir = await _packetsDirectoryFor(
+              serverId,
+              createRoot: false,
+            );
+            if (validatedDir == null || !await validatedDir.exists()) return;
+            if (!await _containsOnlySafePacketChildren(validatedDir)) return;
+            debugPrint(
+              '🗑️ SCAN_LOG: Deleting packets directory: ${validatedDir.path}',
+            );
+            await validatedDir.delete(recursive: true);
+            await _packetSessionHook?.call('remove');
+          },
+        );
+      });
     });
   }
 
@@ -944,24 +1185,27 @@ class IncompleteScanService {
   static Future<void> keepLocalCopy(IncompleteScan scan) async {
     final serverId = ServerId.tryParse(scan.id);
     if (serverId == null) return;
-    final list = await getAll();
-    list.removeWhere((s) => s.id == serverId.value);
-    list.insert(
-      0,
-      IncompleteScan(
-        id: serverId.value,
-        startTimestamp: scan.startTimestamp,
-        lastUpdateTimestamp: scan.lastUpdateTimestamp,
-        progress: scan.progress,
-        receivedPackets: scan.receivedPackets,
-        expectedPackets: scan.expectedPackets,
-        filename: scan.filename,
-        isRemote: false,
-        deviceId: scan.deviceId,
-        deviceName: scan.deviceName,
-      ),
-    );
-    await _save(list);
+    await flushPending(sessionId: serverId.value);
+    await _withPacketSessionLock<void>('incomplete-scan-metadata', () async {
+      final list = await _readAll();
+      list.removeWhere((s) => s.id == serverId.value);
+      list.insert(
+        0,
+        IncompleteScan(
+          id: serverId.value,
+          startTimestamp: scan.startTimestamp,
+          lastUpdateTimestamp: scan.lastUpdateTimestamp,
+          progress: scan.progress,
+          receivedPackets: scan.receivedPackets,
+          expectedPackets: scan.expectedPackets,
+          filename: scan.filename,
+          isRemote: false,
+          deviceId: scan.deviceId,
+          deviceName: scan.deviceName,
+        ),
+      );
+      await _save(list);
+    });
   }
 
   /// Replaces the local packet cache for a scan.
@@ -974,30 +1218,38 @@ class IncompleteScanService {
     final materializedPackets = packets
         .map<Uint8List>(Uint8List.fromList)
         .toList(growable: false);
-    final dir = await _packetsDirectoryFor(serverId, createRoot: true);
-    if (dir == null) return;
-    await _packetSessionHook?.call('replace-prelock');
-    await _withPacketSessionLock<void>(_packetSessionLockKey(dir), () async {
-      await _packetSessionHook?.call('replace');
-      final validatedDir = await _packetsDirectoryFor(
-        serverId,
-        createRoot: true,
-      );
-      if (validatedDir == null) return;
-      if (await validatedDir.exists()) {
-        if (!await _containsOnlySafePacketChildren(validatedDir)) return;
-        await validatedDir.delete(recursive: true);
-      }
-      await validatedDir.create(recursive: true);
+    await _withSessionMutation(serverId.value, () async {
+      await _discardPersistence(serverId.value);
+      final dir = await _packetsDirectoryFor(serverId, createRoot: true);
+      if (dir == null) return;
+      await _packetSessionHook?.call('replace-prelock');
+      await _withPacketSessionLock<void>('active-scan-session', () async {
+        await _withPacketSessionLock<void>(
+          _packetSessionLockKey(dir),
+          () async {
+            await _packetSessionHook?.call('replace');
+            final validatedDir = await _packetsDirectoryFor(
+              serverId,
+              createRoot: true,
+            );
+            if (validatedDir == null) return;
+            if (await validatedDir.exists()) {
+              if (!await _containsOnlySafePacketChildren(validatedDir)) return;
+              await validatedDir.delete(recursive: true);
+            }
+            await validatedDir.create(recursive: true);
 
-      for (var index = 0; index < materializedPackets.length; index++) {
-        final written = await _writePacketFileLocked(
-          validatedDir,
-          index,
-          materializedPackets[index],
+            for (var index = 0; index < materializedPackets.length; index++) {
+              final written = await _writePacketFileLocked(
+                validatedDir,
+                index,
+                materializedPackets[index],
+              );
+              if (!written) return;
+            }
+          },
         );
-        if (!written) return;
-      }
+      });
     });
   }
 
@@ -1005,7 +1257,10 @@ class IncompleteScanService {
   static Future<void> _save(List<IncompleteScan> list) async {
     final prefs = await SharedPreferences.getInstance();
     final String jsonString = jsonEncode(list.map((e) => e.toJson()).toList());
-    await prefs.setString(_key, jsonString);
+    if (!await prefs.setString(_key, jsonString)) {
+      throw FileSystemException('Scan metadata could not be saved');
+    }
+    onMetadataSavedForTesting?.call();
   }
 
   /// Get current scan ID
@@ -1013,6 +1268,22 @@ class IncompleteScanService {
 
   /// Clear current scan ID (when starting fresh scan)
   static void clearCurrentScan() {
+    _sessionEpoch++;
     _currentScanId = null;
+    for (final entry in _persistence.entries.toList(growable: false)) {
+      unawaited(
+        entry.value
+            .close()
+            .then((_) {
+              if (identical(_persistence[entry.key], entry.value)) {
+                _persistence.remove(entry.key);
+              }
+            })
+            .catchError((Object _) {
+              // The queue retains failed records for explicit flush/retry and
+              // reports the storage error through persistenceError.
+            }),
+      );
+    }
   }
 }

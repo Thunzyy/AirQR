@@ -8,8 +8,15 @@ import 'server_id.dart';
 import 'src/rust/api/simple.dart';
 import 'websocket_sync.dart';
 
-typedef ScannerLocalSavePacketCallback =
-    Future<void> Function(int packetIndex, Uint8List packetData);
+typedef ScannerLocalPersistProgressCallback =
+    Future<void> Function({
+      required String sessionId,
+      required Uint8List packetData,
+      required double progress,
+      required int receivedPackets,
+      required int expectedPackets,
+      String? filename,
+    });
 typedef ScannerLocalUploadPacketCallback =
     Future<bool> Function({
       required String sessionId,
@@ -26,13 +33,6 @@ typedef ScannerLocalRealtimePacketCallback =
       String? filename,
       required int receivedPackets,
       required int expectedPackets,
-    });
-typedef ScannerLocalUpdateProgressCallback =
-    Future<void> Function({
-      required double progress,
-      required int receivedPackets,
-      required int expectedPackets,
-      String? filename,
     });
 typedef ScannerLocalCompleteScanCallback = Future<void> Function();
 typedef ScannerLocalNowMillisCallback = int Function();
@@ -125,29 +125,26 @@ class ScannerLocalErrorTransition extends ScannerLocalDecodeTransition {
 }
 
 class ScannerLocalDecodeController {
-  final ScannerLocalSavePacketCallback _savePacket;
+  final ScannerLocalPersistProgressCallback _persistProgress;
   final ScannerLocalUploadPacketCallback _uploadPacketToServer;
   final ScannerLocalRealtimePacketCallback _notifyRealtimePacket;
-  final ScannerLocalUpdateProgressCallback _updateIncompleteProgress;
   final ScannerLocalCompleteScanCallback _completeCurrentScan;
   final ScannerLocalNowMillisCallback _nowMillis;
   final ScannerLocalLogCallback _log;
 
   ScannerLocalDecodeController({
-    ScannerLocalSavePacketCallback? savePacket,
+    ScannerLocalPersistProgressCallback? persistProgress,
     ScannerLocalUploadPacketCallback? uploadPacketToServer,
     ScannerLocalRealtimePacketCallback? notifyRealtimePacket,
-    ScannerLocalUpdateProgressCallback? updateIncompleteProgress,
     ScannerLocalCompleteScanCallback? completeCurrentScan,
     ScannerLocalNowMillisCallback? nowMillis,
     ScannerLocalLogCallback? log,
-  }) : _savePacket = savePacket ?? IncompleteScanService.savePacket,
+  }) : _persistProgress =
+           persistProgress ?? IncompleteScanService.recordProgressPacket,
        _uploadPacketToServer =
            uploadPacketToServer ?? _defaultUploadPacketToServer,
        _notifyRealtimePacket =
            notifyRealtimePacket ?? _defaultNotifyRealtimePacket,
-       _updateIncompleteProgress =
-           updateIncompleteProgress ?? IncompleteScanService.updateProgress,
        _completeCurrentScan =
            completeCurrentScan ?? IncompleteScanService.completeCurrentScan,
        _nowMillis = nowMillis ?? (() => DateTime.now().millisecondsSinceEpoch),
@@ -196,7 +193,14 @@ class ScannerLocalDecodeController {
     final receivedPackets = result.receivedPackets;
     final expectedPackets = result.expectedPackets;
 
-    await _savePacket(receivedPackets, rawBytes);
+    await _persistProgress(
+      sessionId: sessionId,
+      packetData: rawBytes,
+      progress: normalizeIncompleteProgress(result.percent / 100.0),
+      receivedPackets: receivedPackets,
+      expectedPackets: expectedPackets,
+      filename: displayFilename,
+    );
 
     final packetIndexForLog = receivedPackets;
     final expectedForLog = expectedPackets;
@@ -228,13 +232,6 @@ class ScannerLocalDecodeController {
       filename: transportFilename,
       receivedPackets: receivedPackets,
       expectedPackets: expectedPackets,
-    );
-
-    await _updateIncompleteProgress(
-      progress: normalizeIncompleteProgress(result.percent / 100.0),
-      receivedPackets: receivedPackets,
-      expectedPackets: expectedPackets,
-      filename: displayFilename,
     );
 
     final displayReceived = receivedPackets > state.displayReceivedPackets

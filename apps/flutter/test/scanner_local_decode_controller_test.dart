@@ -17,10 +17,21 @@ void main() {
       var updatedExpected = 0;
 
       final controller = ScannerLocalDecodeController(
-        savePacket: (packetIndex, packetData) async {
-          savedPacketIndex = packetIndex;
-          savedPacketBytes = packetData;
-        },
+        persistProgress:
+            ({
+              required sessionId,
+              required packetData,
+              required progress,
+              required receivedPackets,
+              required expectedPackets,
+              filename,
+            }) async {
+              savedPacketIndex = receivedPackets;
+              savedPacketBytes = packetData;
+              updatedProgress = progress;
+              updatedReceived = receivedPackets;
+              updatedExpected = expectedPackets;
+            },
         uploadPacketToServer:
             ({
               required sessionId,
@@ -43,17 +54,6 @@ void main() {
               required expectedPackets,
             }) {
               realtimeSessionId = sessionId;
-            },
-        updateIncompleteProgress:
-            ({
-              required progress,
-              required receivedPackets,
-              required expectedPackets,
-              filename,
-            }) async {
-              updatedProgress = progress;
-              updatedReceived = receivedPackets;
-              updatedExpected = expectedPackets;
             },
       );
 
@@ -170,7 +170,15 @@ void main() {
       'progress transitions cap incomplete threshold at 99.9 percent',
       () async {
         final controller = ScannerLocalDecodeController(
-          savePacket: (_, _) async {},
+          persistProgress:
+              ({
+                required sessionId,
+                required packetData,
+                required progress,
+                required receivedPackets,
+                required expectedPackets,
+                filename,
+              }) async {},
           uploadPacketToServer:
               ({
                 required sessionId,
@@ -188,13 +196,6 @@ void main() {
                 required receivedPackets,
                 required expectedPackets,
               }) {},
-          updateIncompleteProgress:
-              ({
-                required progress,
-                required receivedPackets,
-                required expectedPackets,
-                filename,
-              }) async {},
         );
 
         final transition = await controller.applyResult(

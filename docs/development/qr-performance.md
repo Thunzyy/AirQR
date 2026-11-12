@@ -75,7 +75,7 @@ Regression tests first reproduced eager decoding of all 3,000 frames and scanner
 
 ## Remaining performance work
 
-The native `ScannerLocalDecodeController._handleProgress` still awaits each packet's disk write and `IncompleteScanService.updateProgress` history serialization before returning its UI transition. This is a plausible source of pauses under large history or slow storage. A follow-up should measure these stages on iPhone, then introduce bounded persistence batching with explicit flush on pause/reset/completion, session-generation checks and resume-after-interruption tests. Simply making those writes unawaited risks losing or misattributing packets and is not part of this change.
+The native per-packet persistence follow-up was subsequently approved and implemented. Its queue, lifecycle behavior and verification are detailed below. Physical camera and storage throughput on iPhone remain to be measured.
 
 Web generation already uses workers and WASM; this change does not claim a new web-generation speedup. Camera focus, exposure, resolution and actual optical scan throughput require physical-device measurements. The current web fixes recover exception-related gate stalls, not every possible worker hang or hardware bottleneck.
 
@@ -86,3 +86,34 @@ Next device check: generate the same medium/large file before and after, open an
 [PR #16](https://github.com/Thunzyy/AirQR/pull/16) targets PR #14's branch. Implementation commit: `014c09a30af941f75dcaf600691a3a2b8073370c`. [Build 43225209042](https://github.com/Thunzyy/AirQR/actions/runs/43225209042) succeeded on that exact revision. The subsequent documentation commit does not change application code.
 
 The downloaded `AirQR-iOS-performance.ipa` passed ZIP integrity and arm64 Mach-O checks (23,668,092 bytes). SHA-256: `47A118892C97080D7D3A7262AA08602057A0A0FD8A5CF3D1BE821FCED3210B0F`. It is unsigned and requires the usual signing/sideload method. Build success does not substitute for physical-device performance verification. Rollback: revert `014c09a3`.
+
+## Follow-up: Flutter scan persistence
+
+The scanner now waits for admission to a bounded save queue instead of waiting for each disk write and full-history JSON update. Batches start after 16 records or a 500 ms timer. Each batch commits its packets, then writes one metadata snapshot. The queue retains at most 128 packets / 512 KiB of packet bytes, including the active write. If storage falls behind, admission waits before another QR is decoded; the UI event loop stays available. This bounds memory without discarding accepted packets.
+
+Packet files retain the existing immutable, staged, flushed, atomic-rename format and filesystem validation. Individual packet flushes remain; the optimization removes these waits from ordinary camera processing and coalesces history serialization. Old saved scans remain readable. A session is registered before its first batch so committed packet files remain discoverable even if the process stops before its next metadata snapshot.
+
+The save queue captures the session identity and owns copies of the packet bytes. Session changes close admission and drain the old queue. Reset/resume wait for the active decoder operation and outstanding saves before changing decoder state. Background/inactive lifecycle events, leaving the scanner tab and disposal also drain after the active frame. Reads for History/resume flush pending data. Completion drains before removing the incomplete scan. Explicit deletion discards uncommitted work, waits for any active write and serializes removal with activation; a delayed writer cannot recreate a deleted session. Packet-cache replacement similarly prevents incoming work overtaking it.
+
+On a write failure, the failed batch remains in memory and a visible storage error is reported. Retrying skips already committed immutable packets and retries the rest. Automatic retries are spaced two seconds apart while the queue is open; explicit lifecycle flushes also retry. Metadata publication follows successful packet commits. Normal lifecycle pauses flush pending records, but an abrupt process kill or power loss can still lose records that have not reached disk. The 500 ms value is a flush trigger, not a durability deadline on a slow disk.
+
+### Follow-up verification
+
+- The initial slow-disk regression failed: the live progress transition stayed blocked behind the packet writer. It passes with the new queue.
+- 58 targeted tests passed: bounded bytes/packet count with concurrent producers, deadline flush, error/retry, immutable packet ownership, session switching, reset/resume, deletion, same-ID reuse, replacement, completion, previous filesystem boundaries and real widget lifecycle callbacks. The widget tests stop the fake 500 ms clock and verify commits after pause/tab exit/disposal.
+- Full `flutter test --no-pub --reporter expanded`: 690 passed, seven opt-in tests skipped. Two native persistence opt-in tests are run separately below.
+- Real native replay: generate an 8,192-byte synthetic file with the release Rust library, extract the QR byte segments with ZXing, save 13 of 39 packets, flush, reset the Rust decoder, reload packets from disk and finish scanning. Reconstructed bytes and filename match the input exactly. This exercises actual FFI/QR/RaptorQ/filesystem code; it is not a physical camera test.
+- A 40-packet batch test commits metadata three times instead of 40. The queue keeps at most 16 packets in each write batch.
+
+Reproduce the opt-in native replay and persistence benchmark on Windows:
+
+```powershell
+# apps/flutter/rust
+cargo build --release
+# apps/flutter (use the absolute library path from the current checkout)
+flutter test --no-pub --reporter expanded test/scanner_persistence_native_test.dart --dart-define=AIRQR_NATIVE_PERSISTENCE=true --dart-define=AIRQR_NATIVE_LIBRARY=C:/path/to/AirQR/apps/flutter/rust/target/release/rust_lib_airqr_mobile.dll
+```
+
+The benchmark compares the previous `savePacket` + `updateProgress` blocking sequence against queue admission and final durable drain for 96 packets of 1,200 bytes. File writes and atomic flushes are real; SharedPreferences uses its test backend, so JSON work is exercised but native preferences-plugin disk latency is not measured. Admission latency and durable completion are reported separately. Neither number is camera FPS.
+
+Final measured medians on PCFIXE (three runs): previous blocking persistence 1,088.3 ms, new queue admission 2.229 ms, final durable completion 893.8 ms. Metadata writes fall from 96 to six. The storage work is still performed; it no longer blocks each ordinary camera packet. The final opt-in replay/benchmark suite passed both tests, `flutter analyze --no-pub` reported no issues, and the source whitespace check passed.

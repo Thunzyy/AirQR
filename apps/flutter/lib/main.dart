@@ -212,7 +212,7 @@ class ScannerPage extends StatefulWidget {
   State<ScannerPage> createState() => _ScannerPageState();
 }
 
-class _ScannerPageState extends State<ScannerPage> {
+class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   String _status = "Scanning...";
   double _progress = 0.0;
   bool _isScanning = true;
@@ -225,6 +225,7 @@ class _ScannerPageState extends State<ScannerPage> {
   int _lastUpdateTime = 0;
   bool _isReloading = false;
   bool _isDisposed = false;
+  bool _appIsActive = true;
   bool _isResuming = false; // Add flag to prevent concurrent resumes
   bool _isExplicitResume =
       false; // True when user explicitly resumed a session — prevents session switching on QR stream ID mismatch
@@ -404,6 +405,8 @@ class _ScannerPageState extends State<ScannerPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    IncompleteScanService.persistenceError.addListener(_onPersistenceError);
     _scannerLiveSessionController = ScannerLiveSessionController(
       resolveFreshSession: _resolveSessionForFreshScan,
     );
@@ -783,6 +786,9 @@ class _ScannerPageState extends State<ScannerPage> {
   void dispose() {
     _isDisposed = true;
     _scannerOperations.invalidate();
+    WidgetsBinding.instance.removeObserver(this);
+    IncompleteScanService.persistenceError.removeListener(_onPersistenceError);
+    unawaited(_flushScanPersistence());
     _analysisFpsTimer?.cancel();
     widget.settingsChangedNotifier.removeListener(_onSettingsChanged);
     _resetTimer?.cancel();
@@ -800,6 +806,28 @@ class _ScannerPageState extends State<ScannerPage> {
     super.dispose();
   }
 
+  void _onPersistenceError() {
+    if (mounted && !_isDisposed) setState(() {});
+  }
+
+  Future<void> _flushScanPersistence() async {
+    try {
+      // A frame already decoding can still enqueue its packet after the pause.
+      // Stop admission first, wait for that frame, then flush its final record.
+      await _scannerOperations.idle;
+      await IncompleteScanService.flushPending();
+    } catch (error) {
+      debugPrint('Scanner persistence flush failed: $error');
+      _onPersistenceError();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appIsActive = state == AppLifecycleState.resumed;
+    if (!_appIsActive) unawaited(_flushScanPersistence());
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -809,6 +837,9 @@ class _ScannerPageState extends State<ScannerPage> {
   @override
   void didUpdateWidget(covariant ScannerPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive && !widget.isActive) {
+      unawaited(_flushScanPersistence());
+    }
     final decision = _scannerLifecycleController.handleVisibilityChange(
       oldIsActive: oldWidget.isActive,
       newIsActive: widget.isActive,
@@ -878,7 +909,10 @@ class _ScannerPageState extends State<ScannerPage> {
     try {
       debugPrint('🔄 RESUME_LOG: Starting resume for scanId=$scanId');
 
-      await _scannerOperations.restart(resetDecoder);
+      await _scannerOperations.restart(() async {
+        await IncompleteScanService.flushPending();
+        await resetDecoder();
+      });
       if (!mounted || _isDisposed) return;
       final resumeState = await _scannerResumeController.loadResume(scanId);
       final loadedResume = _scannerResumeFlowController.applyLoadedResume(
@@ -1179,6 +1213,8 @@ class _ScannerPageState extends State<ScannerPage> {
 
   void _onDetect(BarcodeCapture capture) {
     if (_isDisposed ||
+        !widget.isActive ||
+        !_appIsActive ||
         _isReloading ||
         _isResuming ||
         !_isScanning ||
@@ -1212,6 +1248,10 @@ class _ScannerPageState extends State<ScannerPage> {
       if (!isCurrent()) return;
 
       if (barcode.rawBytes != null) {
+        await IncompleteScanService.waitForPacketCapacity(
+          barcode.rawBytes!.length,
+        );
+        if (!isCurrent()) return;
         final frameTransition = _scannerFrameController.handleFrame(
           rawBytes: barcode.rawBytes!,
           state: ScannerFrameState(
@@ -1457,6 +1497,7 @@ class _ScannerPageState extends State<ScannerPage> {
     _resetTimer?.cancel();
     try {
       await _scannerOperations.restart(() async {
+        await IncompleteScanService.flushPending();
         await resetDecoder();
         if (!mounted || _isDisposed) return;
         _isExplicitResume = false;
@@ -1731,7 +1772,7 @@ class _ScannerPageState extends State<ScannerPage> {
             displayChunks: _displayChunks,
             displayProgress: displayProgress,
             isComplete: isComplete,
-            status: _status,
+            status: IncompleteScanService.persistenceError.value ?? _status,
             primaryColor: primaryColor,
             successColor: successColor,
             onToggleTorch: showMobileCamera
