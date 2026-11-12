@@ -316,16 +316,50 @@ class HistorySearchToolbar extends StatelessWidget {
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
-              final scaledBadgeFont = MediaQuery.textScalerOf(
-                context,
-              ).scale(10);
+              final compact = constraints.maxWidth < 340;
+              final actionGap = compact ? 2.0 : 4.0;
+              final badgeGap = connected ? (compact ? 6.0 : 8.0) : 0.0;
+              final badgePadding = compact ? 8.0 : 12.0;
+              final badgeStyle = Theme.of(context).textTheme.labelMedium!
+                  .copyWith(
+                    color: AirQrTheme.successText(context),
+                    fontSize: compact ? 9 : 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    height: 1.5,
+                  );
+              final badgeText = connectedLabel.toUpperCase();
+              final badgePainter = TextPainter(
+                text: TextSpan(text: badgeText, style: badgeStyle),
+                textDirection: Directionality.of(context),
+                textScaler: MediaQuery.textScalerOf(context),
+              )..layout();
+              final badgeWidth = connected
+                  ? badgePainter.width.ceilToDouble() + badgePadding * 2 + 2
+                  : 0.0;
+              badgePainter.dispose();
+              final actionCount =
+                  4 +
+                  (syncEnabled ? 1 : 0) +
+                  (onEnterSelection != null ? 1 : 0);
+              final buttonSize =
+                  ((constraints.maxWidth -
+                              badgeWidth -
+                              badgeGap -
+                              (actionCount - 1) * actionGap) /
+                          actionCount)
+                      .clamp(
+                        MediaQuery.textScalerOf(context).scale(10) > 14
+                            ? 48.0
+                            : 32.0,
+                        48.0,
+                      );
               final connectionBadge = Container(
-                constraints: BoxConstraints(
-                  minHeight: 28,
-                  maxWidth: scaledBadgeFont > 14 ? 220 : 128,
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
+                key: const Key('history-connection-badge'),
+                width: badgeWidth,
+                constraints: const BoxConstraints(minHeight: 28),
+                padding: EdgeInsets.symmetric(
+                  horizontal: badgePadding,
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
@@ -337,152 +371,152 @@ class HistorySearchToolbar extends StatelessWidget {
                     ).withValues(alpha: 0.22),
                   ),
                 ),
-                child: Text(
-                  connectedLabel.toUpperCase(),
-                  maxLines: scaledBadgeFont > 14 ? 2 : 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: AirQrTheme.successText(context),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                    height: 1.5,
+                child: Text(badgeText, maxLines: 1, style: badgeStyle),
+              );
+              final actions = <Widget>[
+                _HistoryToolbarActionBox(
+                  size: buttonSize,
+                  surfaceColor: actionSurface,
+                  hoverColor: actionHover,
+                  child: IconButton(
+                    tooltip: searchHint,
+                    onPressed: onToggleSearch,
+                    icon: AirQrIcon(
+                      searchOpen ? 'close' : 'search',
+                      color: textSecondary,
+                      size: 20,
+                    ),
                   ),
                 ),
-              );
-              final actions = Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
+                if (onEnterSelection != null) ...[
                   _HistoryToolbarActionBox(
+                    size: buttonSize,
                     surfaceColor: actionSurface,
                     hoverColor: actionHover,
                     child: IconButton(
-                      tooltip: searchHint,
-                      onPressed: onToggleSearch,
+                      tooltip: selectTooltip,
+                      onPressed: onEnterSelection,
                       icon: AirQrIcon(
-                        searchOpen ? 'close' : 'search',
+                        'checklist',
                         color: textSecondary,
                         size: 20,
                       ),
                     ),
                   ),
-                  if (onEnterSelection != null) ...[
-                    _HistoryToolbarActionBox(
-                      surfaceColor: actionSurface,
-                      hoverColor: actionHover,
-                      child: IconButton(
-                        tooltip: selectTooltip,
-                        onPressed: onEnterSelection,
-                        icon: AirQrIcon(
-                          'checklist',
-                          color: textSecondary,
-                          size: 20,
+                ],
+                _HistoryToolbarActionBox(
+                  size: buttonSize,
+                  surfaceColor: actionSurface,
+                  hoverColor: actionHover,
+                  child: _HistorySortDropdownButton(
+                    tooltip: sortTooltip,
+                    items: sortItems,
+                    onSelected: onSortSelected,
+                    iconColor: textSecondary,
+                    menuSurfaceColor: actionSurface,
+                    selectedSurfaceColor: AirQrTheme.navActive(context),
+                    hoverColor: actionHover,
+                    borderColor: controlBorder,
+                  ),
+                ),
+                _HistoryToolbarActionBox(
+                  size: buttonSize,
+                  surfaceColor: actionSurface,
+                  hoverColor: actionHover,
+                  child: IconButton(
+                    tooltip: refreshTooltip,
+                    onPressed: onRefresh,
+                    icon: AirQrIcon('refresh', color: textSecondary, size: 20),
+                  ),
+                ),
+                if (syncEnabled) ...[
+                  _HistoryToolbarActionBox(
+                    size: buttonSize,
+                    surfaceColor: actionSurface,
+                    hoverColor: actionHover,
+                    child: IconButton(
+                      tooltip: syncTooltip,
+                      onPressed: isSyncingNow ? null : onSyncNow,
+                      icon: isSyncingNow
+                          ? SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  textSecondary,
+                                ),
+                              ),
+                            )
+                          : AirQrIcon(
+                              'cloud_upload',
+                              color: textSecondary,
+                              size: 20,
+                            ),
+                    ),
+                  ),
+                ],
+                _HistoryToolbarActionBox(
+                  size: buttonSize,
+                  surfaceColor: actionSurface,
+                  hoverColor: actionHover,
+                  child: IconButton(
+                    tooltip: clearHistoryTooltip,
+                    onPressed: canClearHistory ? onClearHistory : null,
+                    icon: AirQrIcon(
+                      'delete',
+                      color: canClearHistory
+                          ? AirQrTheme.dangerText(context)
+                          : textMuted.withValues(alpha: 0.42),
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ];
+              final rowWidth =
+                  badgeWidth +
+                  badgeGap +
+                  actionCount * buttonSize +
+                  (actionCount - 1) * actionGap;
+
+              // Keep a single row. Only unusually large accessibility text
+              // needs horizontal scrolling; never squash the badge or icons.
+              return SingleChildScrollView(
+                key: const Key('history-toolbar-scroll'),
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: rowWidth > constraints.maxWidth
+                      ? rowWidth
+                      : constraints.maxWidth,
+                  child: Row(
+                    children: [
+                      if (connected) connectionBadge,
+                      SizedBox(width: badgeGap),
+                      const Spacer(),
+                      IconButtonTheme(
+                        data: IconButtonThemeData(
+                          style: IconButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            for (
+                              var index = 0;
+                              index < actions.length;
+                              index++
+                            ) ...[
+                              if (index > 0) SizedBox(width: actionGap),
+                              actions[index],
+                            ],
+                          ],
                         ),
                       ),
-                    ),
-                  ],
-                  _HistoryToolbarActionBox(
-                    surfaceColor: actionSurface,
-                    hoverColor: actionHover,
-                    child: _HistorySortDropdownButton(
-                      tooltip: sortTooltip,
-                      items: sortItems,
-                      onSelected: onSortSelected,
-                      iconColor: textSecondary,
-                      menuSurfaceColor: actionSurface,
-                      selectedSurfaceColor: AirQrTheme.navActive(context),
-                      hoverColor: actionHover,
-                      borderColor: controlBorder,
-                    ),
-                  ),
-                  _HistoryToolbarActionBox(
-                    surfaceColor: actionSurface,
-                    hoverColor: actionHover,
-                    child: IconButton(
-                      tooltip: refreshTooltip,
-                      onPressed: onRefresh,
-                      icon: AirQrIcon(
-                        'refresh',
-                        color: textSecondary,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                  if (syncEnabled) ...[
-                    _HistoryToolbarActionBox(
-                      surfaceColor: actionSurface,
-                      hoverColor: actionHover,
-                      child: IconButton(
-                        tooltip: syncTooltip,
-                        onPressed: isSyncingNow ? null : onSyncNow,
-                        icon: isSyncingNow
-                            ? SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    textSecondary,
-                                  ),
-                                ),
-                              )
-                            : AirQrIcon(
-                                'cloud_upload',
-                                color: textSecondary,
-                                size: 20,
-                              ),
-                      ),
-                    ),
-                  ],
-                  _HistoryToolbarActionBox(
-                    surfaceColor: actionSurface,
-                    hoverColor: actionHover,
-                    child: IconButton(
-                      tooltip: clearHistoryTooltip,
-                      onPressed: canClearHistory ? onClearHistory : null,
-                      icon: AirQrIcon(
-                        'delete',
-                        color: canClearHistory
-                            ? AirQrTheme.dangerText(context)
-                            : textMuted.withValues(alpha: 0.42),
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-
-              // Match the web: 48dp actions, 8dp gaps and an uncompressed badge.
-              final actionCount =
-                  4 +
-                  (syncEnabled ? 1 : 0) +
-                  (onEnterSelection != null ? 1 : 0);
-              final actionsWidth = actionCount * 48.0 + (actionCount - 1) * 8;
-              final useStackedToolbar =
-                  constraints.maxWidth < 290 ||
-                  constraints.maxWidth < actionsWidth + 140 ||
-                  scaledBadgeFont > 14;
-              if (useStackedToolbar) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (connected) ...[
-                      connectionBadge,
-                      const SizedBox(height: 8),
                     ],
-                    Align(alignment: Alignment.centerRight, child: actions),
-                  ],
-                );
-              }
-
-              return Row(
-                children: [
-                  if (connected) connectionBadge,
-                  const Spacer(),
-                  actions,
-                ],
+                  ),
+                ),
               );
             },
           ),
@@ -720,11 +754,13 @@ class HistorySelectionBar extends StatelessWidget {
 }
 
 class _HistoryToolbarActionBox extends StatefulWidget {
+  final double size;
   final Color surfaceColor;
   final Color hoverColor;
   final Widget child;
 
   const _HistoryToolbarActionBox({
+    this.size = 48,
     required this.surfaceColor,
     required this.hoverColor,
     required this.child,
@@ -741,33 +777,35 @@ class _HistoryToolbarActionBoxState extends State<_HistoryToolbarActionBox> {
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onFocusChange: (focused) => setState(() => _focused = focused),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: AnimatedContainer(
-          duration: _historyAnimationDuration(
-            context,
-            const Duration(milliseconds: 160),
+    return SizedBox(
+      width: widget.size,
+      height: widget.size,
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (focused) => setState(() => _focused = focused),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: AnimatedContainer(
+            duration: _historyAnimationDuration(
+              context,
+              const Duration(milliseconds: 160),
+            ),
+            curve: Curves.easeOut,
+            decoration: BoxDecoration(
+              color: _hovered || _focused
+                  ? widget.hoverColor
+                  : widget.surfaceColor,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            foregroundDecoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AirQrTheme.controlBorder(context)),
+            ),
+            child: widget.child,
           ),
-          curve: Curves.easeOut,
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: _hovered || _focused
-                ? widget.hoverColor
-                : widget.surfaceColor,
-            borderRadius: BorderRadius.circular(24),
-          ),
-          foregroundDecoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AirQrTheme.controlBorder(context)),
-          ),
-          child: widget.child,
         ),
       ),
     );

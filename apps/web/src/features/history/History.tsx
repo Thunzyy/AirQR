@@ -485,7 +485,7 @@ const History: React.FC<HistoryProps> = ({
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden text-[var(--airqr-text-primary)] animate-fade-in">
-      <div className="relative z-40 shrink-0 px-4 pb-3 pt-5">
+      <div className="airqr-history-toolbar-container relative z-40 shrink-0 px-4 pb-3 pt-5">
         {selectionMode ? (
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
@@ -568,10 +568,10 @@ const History: React.FC<HistoryProps> = ({
             </div>
           </div>
         ) : (
-        <div data-testid="history-toolbar" className="flex flex-wrap items-center justify-end gap-2">
+        <div data-testid="history-toolbar" className="airqr-history-toolbar">
           {syncStatusLabel ? (
             <span
-              className={`mr-auto inline-flex max-w-full shrink-0 items-center rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-wide ${
+              className={`airqr-history-status inline-flex shrink-0 items-center rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-wide ${
                 syncStatusClassName ||
                 "border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)]"
               }`}
@@ -579,7 +579,7 @@ const History: React.FC<HistoryProps> = ({
               {syncStatusLabel}
             </span>
           ) : null}
-          <div className="ml-auto flex flex-wrap justify-end gap-2">
+          <div className="airqr-history-actions">
           <button
             type="button"
             onClick={() => {
@@ -590,13 +590,13 @@ const History: React.FC<HistoryProps> = ({
               }
               setSearchOpen(true);
             }}
-            className={`flex size-12 shrink-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] shadow-[0_16px_44px_rgba(56,83,105,0.20)] transition-colors hover:bg-[var(--airqr-action-hover)] ${
+            className={`airqr-history-action flex min-w-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] shadow-[0_16px_44px_rgba(56,83,105,0.20)] transition-colors hover:bg-[var(--airqr-action-hover)] ${
               searchOpen || query ? "text-[var(--airqr-text-primary)]" : "text-[var(--airqr-text-secondary)]"
             }`}
             aria-label={t('history.searchHistory')}
             aria-expanded={searchOpen}
           >
-            <Icon name={searchOpen ? "close" : "search"} className="text-[26px]" />
+            <Icon name={searchOpen ? "close" : "search"} className="text-xl" />
           </button>
           <button
             type="button"
@@ -605,7 +605,7 @@ const History: React.FC<HistoryProps> = ({
               setSelectionMode(true);
             }}
             disabled={!hasAnyHistory}
-            className="flex size-12 shrink-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="airqr-history-action flex min-w-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={t("history.selectItems")}
             title={t("history.selectItems")}
           >
@@ -616,7 +616,7 @@ const History: React.FC<HistoryProps> = ({
             <button
               type="button"
               onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
-              className="flex size-12 shrink-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)]"
+              className="airqr-history-action flex min-w-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)]"
               aria-label={t('history.sortTitle')}
               title={t('history.sortTitle')}
             >
@@ -651,7 +651,7 @@ const History: React.FC<HistoryProps> = ({
             <button
               type="button"
               onClick={onRefresh}
-              className="flex size-12 shrink-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)]"
+              className="airqr-history-action flex min-w-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)]"
               aria-label={t('common.refresh')}
               title={t('common.refresh')}
             >
@@ -663,7 +663,7 @@ const History: React.FC<HistoryProps> = ({
               type="button"
               onClick={onSyncToServer}
               disabled={isSyncing}
-              className={`flex size-12 shrink-0 items-center justify-center rounded-full border transition-colors ${
+              className={`airqr-history-action flex min-w-0 items-center justify-center rounded-full border transition-colors ${
                 isSyncing
                 ? "airqr-action-button cursor-not-allowed"
                   : "airqr-action-button airqr-action-button-accent"
@@ -682,7 +682,7 @@ const History: React.FC<HistoryProps> = ({
               type="button"
               onClick={onClearHistory}
               disabled={isClearingHistory || !hasAnyHistory}
-              className={`flex size-12 shrink-0 items-center justify-center rounded-full border transition-colors ${
+              className={`airqr-history-action flex min-w-0 items-center justify-center rounded-full border transition-colors ${
                 isClearingHistory || !hasAnyHistory
                   ? "airqr-action-button cursor-not-allowed"
                   : "airqr-action-button airqr-action-button-danger"

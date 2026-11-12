@@ -10,7 +10,7 @@ The reference is the existing web design in `apps/web/src/index.css`, not a new 
 
 - page margins, title hierarchy, card radii (34 px for main surfaces), shadows and light/dark colors;
 - the bottom navigation's standard 76 px height, while allowing large text to grow;
-- history toolbar buttons at 48 px, with wrapping and a separate row for the connection badge when necessary;
+- history toolbar buttons adapt between 32 and 48 px, remaining circular on the same row as the full connection badge;
 - history item actions with a 44 px touch target and 40 px visible surface;
 - decoder picker, empty state and disabled action; the sample GIF action and obsolete copy are removed;
 - settings menus, detail headings, cards, dividers, sliders and dropdowns;
@@ -22,14 +22,14 @@ The reference is the existing web design in `apps/web/src/index.css`, not a new 
 
 | Area | Controls and states reviewed | Evidence and result |
 | --- | --- | --- |
-| App shell | Five tabs, active icon/label, safe-area clearance, keyboard navigation hiding, large text, reduced motion | Flutter `app_shell_test.dart`, `text_scaling_test.dart`; rendered light/dark pages. Navigation now matches the web height while retaining accessible growth. |
+| App shell | Five tabs, active icon/label, safe-area clearance, keyboard, large text, reduced motion | Flutter `app_shell_test.dart`, `text_scaling_test.dart`; rendered light/dark pages. Navigation matches the web height while retaining accessible growth, and remains mounted in the same position behind the system keyboard. |
 | Encoder source | File/note switch, file picker, note format, content, clear, character count, encode action, network notice/dismiss/link actions | `encoder_page_test.dart`, `encoder_source_controller_test.dart`, `encoder_page_widgets_test.dart`; web `EncoderTab.linksite.test.tsx`, `encoderPayload.test.ts`; rendered file and note views. Large-text format selector/footer overflow fixed. |
 | Encoder output | Play/pause, previous/next frame, frame slider/count, FPS controls, zoom, fullscreen/exit, chunks, automatic chunk selection, download | `encoder_inline_preview_test.dart`, `encoder_fullscreen_view_test.dart`, `generated_history_viewer_test.dart`, `encoder_download_controller_test.dart`; web encoder/viewer tests in the complete suite. Existing controls retained; mobile spacing and shared surfaces reviewed. |
 | Decoder | Empty file picker, selected GIF/ZIP, disabled/enabled Decode, busy/progress/error, successful file/note result, download/copy | `decoder_page_test.dart`, `decoder_failure_test.dart`, `scanner_result_view_test.dart`; web `GifDecoder.test.tsx`. Rendered empty states in both themes. “Try a sample GIF” removed; unsupported QR guidance remains on relevant failures. |
 | Scanner camera | Camera selection, torch, help, reset, unavailable/permission state, active/inactive camera | `scanner_mobile_controller_controller_test.dart`, `scanner_lifecycle_controller_test.dart`, `scanner_page_chrome_test.dart`; web `scannerCameraLifecycle.test.tsx`, `ScannerHelpModal.test.tsx`, camera hook tests. Browser camera-unavailable/help views inspected; native overlay captured with synthetic progress. |
 | Scanner progress | FPS, scanned/min/max, source, progress, chunk details, threshold/decoding/complete states | `scanner_analysis_metrics_test.dart`, `scanner_session_progress_test.dart`; web `ScannerChrome.test.tsx`, frame/progress hook tests. Browser panel rectangle stays at y=535.5 / height=338.5 at 402×874 across scanning, threshold reached, decoding and complete. Transient details now live in the details popover. |
 | Scanner completion/resume | File/note preview, save/copy, history, completed-session guard, incomplete resume, reset then same QR | `scanner_operation_controller_test.dart`, `scanner_session_resolution_controller_test.dart`, resume/completion/result controller tests; web `scannerCameraLifecycle.test.tsx`, `useScannerDecoderBootstrap.test.tsx`, `Scanner.noteAutoSave.test.tsx`. Late results are rejected after reset; explicit reset permits rescanning the previous completed session. |
-| History toolbar | Connected/local/unavailable badge, search/close, sort menu, selection mode, refresh, sync all, clear | `history_page_widgets_test.dart`, `history_page_selection_test.dart`, `history_query_test.dart`; web `History.test.tsx`, `HistoryTab.test.tsx`. Browser geometry checked at 320, 390, 402 and 820 px: six 48 px buttons fit without badge overlap or viewport overflow. |
+| History toolbar | Connected/local/unavailable badge, search/close, sort menu, selection mode, refresh, sync all, clear | `history_page_widgets_test.dart`, `history_page_selection_test.dart`, `history_query_test.dart`; web `History.test.tsx`, `HistoryTab.test.tsx`. Follow-up geometry checks at 320/360/375/390/402/820 px: the full badge and six circular actions fit on one row. |
 | History entries | All/scanned/generated filters and counts, date groups, empty view, preview, download, delete, keep local, sync/retry, incomplete progress/resume/delete | `history_page_test.dart`, `history_page_actions_test.dart`, `history_page_refresh_test.dart`, `history_selection_widgets_test.dart`; web history, resume and backfill tests. Rendered populated light/dark native history and connected web history. Incomplete cards use full-width progress and wrap metadata/actions. |
 | History bulk/dialogs | Select/clear selection, download selected, ZIP export, delete confirmation, clear history confirmation, remote-only materialization failures | `history_bulk_export_test.dart`, selection/refresh tests; web `ConfirmDialog.test.tsx`, `HistoryTab.test.tsx`. Existing destructive confirmations and local/remote semantics retained. |
 | Settings menu | Encoder, Scanner, Server sync, Appearance, Logging, About; back navigation | `settings_page_test.dart`; browser and Flutter subpage captures. Shared menu/title/card layout aligned. Native Offline web app section remains available. |
@@ -88,6 +88,15 @@ Both native phases passed (one active test and one skipped in each phase); the b
 The reusable native runner is `apps/flutter/test/live_sync_interop_test.dart`. Run it only against a disposable loopback server with `--dart-define=AIRQR_LIVE_SYNC_URL=<url>` and `--dart-define=AIRQR_LIVE_SYNC_PHASE=upload`, then exchange the payloads in the browser, then repeat with phase `download`. A HTTPS web page needs a HTTPS sync URL; the application's mixed-content protection remains enabled.
 
 ## Platform boundaries and remaining device check
+
+### Follow-up: keyboard stability and a single history toolbar row
+
+Lucas's second iPhone comparison requests the badge beside the buttons, allowing smaller buttons to fit. This supersedes the first implementation's wrapped 48 px toolbar.
+
+- Flutter keeps `AirQrBottomNav` mounted at a fixed bottom position; `SafeArea.maintainBottomViewPadding` prevents the safe-area margin from jumping during keyboard animation. The system keyboard covers the navigation naturally. The existing URL/user/password reachability test now checks stable element identity and geometry at keyboard insets 1/80/300/420 px and after dismissal, with a 34 px iPhone safe area.
+- Both history toolbars adapt their circular actions to the remaining row width (32–48 px), compacting badge padding/gaps on narrow displays. Flutter measures the actual Manrope label. At large accessibility text sizes, native actions retain 48 px targets in a horizontally scrollable single row.
+- Button geometry changes immediately; only hover/focus colors animate. This avoids a transient overflow when the connection/data state or available width changes.
+- Flutter: 56 shell/toolbar tests and 53 selection/text-scaling tests passed. The 2 opt-in capture tests produce 26 light/dark images. Web: 41 History interaction tests, lint and build passed. Browser geometry assertions cover six widths and the open sort menu. These checks use synthetic history entries; iPhone keyboard animation still needs confirmation on the new IPA.
 
 Native file selection, sharing, permissions and keyboard behavior remain OS controls. The browser benchmark/calibration route is browser-specific; native local hosting is native-specific. These are not represented as newly ported features. The table covers shared controls and identifies these boundaries explicitly.
 

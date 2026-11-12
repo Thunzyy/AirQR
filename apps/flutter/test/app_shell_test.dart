@@ -422,6 +422,8 @@ void main() {
   ) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
+    tester.view.viewPadding = const FakeViewPadding(bottom: 34);
+    tester.view.padding = const FakeViewPadding(bottom: 34);
     addTearDown(tester.view.reset);
     SharedPreferences.setMockInitialValues(<String, Object>{
       'airqr_sync_settings': '{"enabled":true}',
@@ -467,6 +469,9 @@ void main() {
       matching: find.byType(TextField),
     );
     expect(fields, findsNWidgets(3));
+    final nav = find.byKey(const Key('airqr-bottom-nav'));
+    final navElement = tester.element(nav);
+    final navRect = tester.getRect(nav);
 
     const values = ['https://example.test', 'airqr-user', 'test-password'];
     for (var index = 0; index < values.length; index++) {
@@ -474,12 +479,17 @@ void main() {
       await tester.ensureVisible(field);
       await tester.showKeyboard(field);
 
-      for (final inset in [300.0, 420.0]) {
+      for (final inset in [1.0, 80.0, 300.0, 420.0]) {
         tester.view.viewInsets = FakeViewPadding(bottom: inset);
+        tester.view.padding = FakeViewPadding(
+          bottom: (34 - inset).clamp(0, 34),
+        );
         await pumpKeyboardLayout();
         expect(tester.getRect(details).bottom, 844);
         expect(tester.getRect(field).bottom, lessThanOrEqualTo(844 - inset));
-        expect(find.byType(AirQrBottomNav), findsNothing);
+        expect(find.byType(AirQrBottomNav), findsOneWidget);
+        expect(tester.element(nav), same(navElement));
+        expect(tester.getRect(nav), navRect);
       }
 
       await tester.enterText(field, values[index]);
@@ -489,8 +499,10 @@ void main() {
 
       FocusManager.instance.primaryFocus?.unfocus();
       tester.view.resetViewInsets();
+      tester.view.padding = const FakeViewPadding(bottom: 34);
       await pumpKeyboardLayout();
       expect(find.byType(AirQrBottomNav), findsOneWidget);
+      expect(tester.getRect(nav), navRect);
     }
 
     for (var index = 0; index < values.length; index++) {

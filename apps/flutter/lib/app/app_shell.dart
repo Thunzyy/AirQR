@@ -255,8 +255,6 @@ class _MainPageState extends State<MainPage> {
       children: pages,
     );
     final settingsActive = _currentIndex == 4;
-    final settingsKeyboardVisible =
-        settingsActive && MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
       extendBody: true,
@@ -268,13 +266,13 @@ class _MainPageState extends State<MainPage> {
         removeBottom: true,
         child: pageStack,
       ),
-      bottomNavigationBar: settingsKeyboardVisible
-          ? null
-          : AirQrBottomNav(
-              currentIndex: _currentIndex,
-              onTap: selectDestination,
-              items: items,
-            ),
+      // Keep the navigation mounted at the screen bottom. The system keyboard
+      // covers it without an extra hide/show transition or layout change.
+      bottomNavigationBar: AirQrBottomNav(
+        currentIndex: _currentIndex,
+        onTap: selectDestination,
+        items: items,
+      ),
     );
   }
 }
@@ -323,6 +321,7 @@ class AirQrBottomNav extends StatelessWidget {
 
     return SafeArea(
       top: false,
+      maintainBottomViewPadding: true,
       minimum: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       child: SizedBox(
         height: navHeight,

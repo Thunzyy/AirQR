@@ -495,14 +495,20 @@ void main() {
     );
   }
 
-  for (final width in <double>[360, 375, 390]) {
+  for (final width in <double>[320, 360, 375, 390, 402, 820]) {
     testWidgets(
-      'history toolbar keeps the badge above full size actions at ${width.toInt()}dp with normal text',
+      'history toolbar keeps the badge and six circular actions on one row at ${width.toInt()}dp',
       (tester) async {
         addTearDown(() => tester.binding.setSurfaceSize(null));
         await tester.binding.setSurfaceSize(Size(width, 640));
+        // The badge's intrinsic width must use the shipped font, not Ahem's
+        // square test glyphs, to check the actual mobile layout.
+        final manrope = FontLoader('Manrope')
+          ..addFont(rootBundle.load('assets/fonts/Manrope-Bold.ttf'));
+        await manrope.load();
         await tester.pumpWidget(
           MaterialApp(
+            theme: ThemeData(fontFamily: 'Manrope'),
             home: Scaffold(
               body: HistorySearchToolbar(
                 searchController: TextEditingController(),
@@ -514,6 +520,8 @@ void main() {
                 refreshTooltip: 'Refresh',
                 clearSearchTooltip: 'Clear search',
                 onToggleSearch: () {},
+                selectTooltip: 'Select',
+                onEnterSelection: () {},
                 onClearSearch: () {},
                 onSearchChanged: (_) {},
                 sortTooltip: 'Sort',
@@ -537,16 +545,27 @@ void main() {
         final badgeRect = tester.getRect(find.text('CONNECTED'));
         final actionRects = <String>[
           'Search',
+          'Select',
           'Sort',
           'Refresh',
           'Sync',
           'Clear history',
         ].map((tooltip) => tester.getRect(find.byTooltip(tooltip))).toList();
         for (final rect in actionRects) {
-          expect(rect.width, greaterThanOrEqualTo(48));
+          expect(rect.width, greaterThanOrEqualTo(32));
+          expect(rect.width, lessThanOrEqualTo(48));
+          expect(rect.width, closeTo(rect.height, 0.01));
+          expect(rect.left, greaterThan(badgeRect.right));
           expect(rect.right, lessThanOrEqualTo(width));
-          expect(rect.top, greaterThan(badgeRect.bottom));
+          expect(rect.center.dy, closeTo(badgeRect.center.dy, 0.01));
         }
+        // Resizing must apply the new geometry immediately. Animating each
+        // circle's width independently temporarily overflows the single row.
+        await tester.binding.setSurfaceSize(Size(width - 8, 640));
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        await tester.pump(const Duration(milliseconds: 80));
+        expect(tester.takeException(), isNull);
       },
     );
   }
@@ -907,6 +926,8 @@ void main() {
         ]) {
           final action = find.byTooltip(tooltip);
           expect(action, findsOneWidget);
+          await tester.ensureVisible(action);
+          await tester.pumpAndSettle();
           expect(action.hitTestable(), findsOneWidget);
           final rect = tester.getRect(action);
           expect(rect.width, greaterThanOrEqualTo(48));
@@ -915,10 +936,17 @@ void main() {
           expect(rect.right, lessThanOrEqualTo(width));
         }
 
-        await tester.tap(find.byTooltip('Search files'));
-        await tester.tap(find.byTooltip('Refresh history'));
-        await tester.tap(find.byTooltip('Sync history'));
-        await tester.tap(find.byTooltip('Clear history'));
+        for (final tooltip in [
+          'Search files',
+          'Refresh history',
+          'Sync history',
+          'Clear history',
+        ]) {
+          final action = find.byTooltip(tooltip);
+          await tester.ensureVisible(action);
+          await tester.pumpAndSettle();
+          await tester.tap(action);
+        }
         expect(searchTaps, 1);
         expect(refreshTaps, 1);
         expect(syncTaps, 1);
