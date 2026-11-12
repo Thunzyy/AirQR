@@ -211,6 +211,38 @@ void main() {
   );
 
   test(
+    'failed session switch keeps the old session retryable before decode',
+    () async {
+      final id = await IncompleteScanService.startNewSession(
+        sessionId: 'switch-error',
+      );
+      await queuePacket(id, 1);
+      IncompleteScanService.setPacketFileWriterForTesting((_, _) async {
+        throw const FileSystemException('storage unavailable');
+      });
+      await expectLater(
+        IncompleteScanService.startNewSession(sessionId: 'other'),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(IncompleteScanService.currentScanId, id);
+      await expectLater(
+        IncompleteScanService.waitForPacketCapacity(1),
+        throwsA(isA<FileSystemException>()),
+      );
+      IncompleteScanService.setPacketFileWriterForTesting(null);
+      await IncompleteScanService.waitForPacketCapacity(1);
+      await queuePacket(id, 2);
+      await IncompleteScanService.flushPending();
+      expect(await IncompleteScanService.getPackets(id), [
+        [1],
+        [2],
+      ]);
+      expect(IncompleteScanService.persistenceError.value, isNull);
+      expect(await IncompleteScanService.getById('other'), isNull);
+    },
+  );
+
+  test(
     'partial write failure retries immutable files without losing packets',
     () async {
       final id = await IncompleteScanService.startNewSession(

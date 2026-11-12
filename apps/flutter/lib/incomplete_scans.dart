@@ -523,8 +523,11 @@ class IncompleteScanService {
     }
   }
 
-  /// Wait only when the bounded backlog is full, before decoding another frame.
+  /// Resolve save errors or a full backlog before decoding another frame.
   static Future<void> waitForPacketCapacity(int bytes) async {
+    // Do not decode more data after a known save failure until retained
+    // records have been committed. The UI remains free to retry/reset.
+    if (persistenceError.value != null) await flushPending();
     await _sessionMutations[_currentScanId];
     await _persistence[_currentScanId]?.waitForCapacity(bytes);
   }
@@ -912,42 +915,53 @@ class IncompleteScanService {
 
   static Future<void> _activateSession(ServerId serverId) async {
     final epoch = ++_sessionEpoch;
+    final previousId = _currentScanId;
     _currentScanId = null;
-    await _sessionMutations[serverId.value];
-    await _withPacketSessionLock<void>('active-scan-session', () async {
-      await _closePersistence();
-      final dir = await _packetsDirectoryFor(serverId, createRoot: true);
-      if (dir == null) {
-        throw FileSystemException(
-          'Unsafe incomplete scan directory',
-          serverId.value,
-        );
-      }
-      await dir.create(recursive: true);
-      if (epoch != _sessionEpoch) throw StateError('Scan session changed');
-      // Make the session discoverable even if the process stops after packet
-      // commit but before a later batched metadata update.
-      await _withPacketSessionLock<void>('incomplete-scan-metadata', () async {
-        final list = await _readAll();
-        if (!list.any((scan) => scan.id == serverId.value)) {
-          final now = DateTime.now().millisecondsSinceEpoch;
-          list.insert(
-            0,
-            IncompleteScan(
-              id: serverId.value,
-              startTimestamp: now,
-              lastUpdateTimestamp: now,
-              progress: 0,
-              receivedPackets: 0,
-              expectedPackets: 0,
-            ),
+    try {
+      await _sessionMutations[serverId.value];
+      await _withPacketSessionLock<void>('active-scan-session', () async {
+        await _closePersistence();
+        final dir = await _packetsDirectoryFor(serverId, createRoot: true);
+        if (dir == null) {
+          throw FileSystemException(
+            'Unsafe incomplete scan directory',
+            serverId.value,
           );
-          await _save(list);
         }
+        await dir.create(recursive: true);
+        if (epoch != _sessionEpoch) throw StateError('Scan session changed');
+        // Make the session discoverable even if the process stops after packet
+        // commit but before a later batched metadata update.
+        await _withPacketSessionLock<void>(
+          'incomplete-scan-metadata',
+          () async {
+            final list = await _readAll();
+            if (!list.any((scan) => scan.id == serverId.value)) {
+              final now = DateTime.now().millisecondsSinceEpoch;
+              list.insert(
+                0,
+                IncompleteScan(
+                  id: serverId.value,
+                  startTimestamp: now,
+                  lastUpdateTimestamp: now,
+                  progress: 0,
+                  receivedPackets: 0,
+                  expectedPackets: 0,
+                ),
+              );
+              await _save(list);
+            }
+          },
+        );
+        if (epoch != _sessionEpoch) throw StateError('Scan session changed');
+        _currentScanId = serverId.value;
       });
-      if (epoch != _sessionEpoch) throw StateError('Scan session changed');
-      _currentScanId = serverId.value;
-    });
+    } catch (_) {
+      // A failed drain must not strand the old scanner with no active storage
+      // session. Its retained batch is retried before the next decode.
+      if (epoch == _sessionEpoch) _currentScanId = previousId;
+      rethrow;
+    }
   }
 
   /// Save a packet for the current scan session
