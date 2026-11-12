@@ -428,6 +428,14 @@ void main() {
     });
     FlutterSecureStorage.setMockInitialValues(<String, String>{});
 
+    const cameraChannel = MethodChannel('flutter_lite_camera');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(cameraChannel, (call) async {
+      if (call.method == 'getDeviceList') return <String>[];
+      throw MissingPluginException();
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(cameraChannel, null));
+
     Future<void> pumpKeyboardLayout() async {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
@@ -436,6 +444,8 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('en'),
+        theme: ThemeData(platform: TargetPlatform.iOS),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: MainPage(
@@ -447,6 +457,7 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('airqr-bottom-nav-item-4')));
     await pumpKeyboardLayout();
+    expect(find.byKey(const Key('settings-menu-list')), findsOneWidget);
     await tester.tap(find.text('Server sync'));
     await pumpKeyboardLayout();
 
@@ -457,7 +468,8 @@ void main() {
     );
     expect(fields, findsNWidgets(3));
 
-    for (var index = 0; index < 3; index++) {
+    const values = ['https://example.test', 'airqr-user', 'test-password'];
+    for (var index = 0; index < values.length; index++) {
       final field = fields.at(index);
       await tester.ensureVisible(field);
       await tester.showKeyboard(field);
@@ -470,12 +482,23 @@ void main() {
         expect(find.byType(AirQrBottomNav), findsNothing);
       }
 
+      await tester.enterText(field, values[index]);
+      await pumpKeyboardLayout();
+      expect(tester.getRect(field).bottom, lessThanOrEqualTo(844 - 420));
+      expect(tester.widget<TextField>(field).controller?.text, values[index]);
+
       FocusManager.instance.primaryFocus?.unfocus();
       tester.view.resetViewInsets();
       await pumpKeyboardLayout();
       expect(find.byType(AirQrBottomNav), findsOneWidget);
     }
 
+    for (var index = 0; index < values.length; index++) {
+      expect(
+        tester.widget<TextField>(fields.at(index)).controller?.text,
+        values[index],
+      );
+    }
     expect(tester.widget<TextField>(fields.last).obscureText, isTrue);
     expect(tester.takeException(), isNull);
   });
