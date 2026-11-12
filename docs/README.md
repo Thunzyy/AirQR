@@ -11,6 +11,8 @@ Public documentation is grouped here by use case.
 
 ## Optional Reading
 
+- [development/flutter-web-parity.md](./development/flutter-web-parity.md)
+  Flutter/web control inventory, scanner and synchronization fixes, and verification evidence for issue #13.
 - [blog/airqr-animated-qr-transfer.mdx](./blog/airqr-animated-qr-transfer.mdx)
   How animated QR transfer works, with benchmarks (English).
 - [blog/airqr-transfert-qr-anime.mdx](./blog/airqr-transfert-qr-anime.mdx)

@@ -162,6 +162,12 @@ void main() {
             ),
           ),
         );
+        await tester.runAsync(
+          () => precacheImage(
+            const AssetImage('assets/logo.png'),
+            tester.element(find.byType(Scaffold).first),
+          ),
+        );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
       }
