@@ -98,10 +98,18 @@ Lucas's second iPhone comparison requests the badge beside the buttons, allowing
 - Button geometry changes immediately; only hover/focus colors animate. This avoids a transient overflow when the connection/data state or available width changes.
 - Flutter: 56 shell/toolbar tests and 53 selection/text-scaling tests passed. The 2 opt-in capture tests produce 26 light/dark images. Web: 41 History interaction tests, lint and build passed. Browser geometry assertions cover six widths and the open sort menu. These checks use synthetic history entries; iPhone keyboard animation still needs confirmation on the new IPA.
 
+| Follow-up verification command | Result |
+| --- | --- |
+| `flutter test --no-pub --reporter expanded test/app_shell_test.dart test/history_page_widgets_test.dart` (`apps/flutter`) | 56 passed. |
+| `flutter test --no-pub --reporter expanded test/history_page_selection_test.dart test/history_selection_widgets_test.dart test/text_scaling_test.dart` (`apps/flutter`) | 53 passed. |
+| `flutter analyze --no-pub` (`apps/flutter`) | No issues. |
+| `npm test -- History.test` (`apps/web`) | 41 passed. |
+| `npm run lint` / `npm run build` (`apps/web`) | Both passed; existing bundle-size warning only. |
+
 Native file selection, sharing, permissions and keyboard behavior remain OS controls. The browser benchmark/calibration route is browser-specific; native local hosting is native-specific. These are not represented as newly ported features. The table covers shared controls and identifies these boundaries explicitly.
 
-Review was a self-review of the diff plus executable checks; no independent reviewer was run. [iOS build 43146322312](https://github.com/Thunzyy/AirQR/actions/runs/43146322312) succeeded on implementation commit `7cca2a9a`; subsequent commits change documentation/tests only. The unsigned IPA passed ZIP integrity verification. SHA-256: `E3167E5C482F9A9C59BB4312F28D6705BCF1280834F23C319C30A2003C8C12D9`. It requires the same signing/sideload method as the previous build.
+Review was a self-review of the diff plus executable checks; no independent reviewer was run. [iOS build 43203539738](https://github.com/Thunzyy/AirQR/actions/runs/43203539738) succeeded on follow-up implementation commit `f030ac9d`, including the keyboard/toolbar changes above; the subsequent commit only updates this verification document. The unsigned IPA passed ZIP integrity and arm64 Mach-O checks (23,654,240 bytes). SHA-256: `9FC266038207506B4597EEDF31B2E0824331D8DD660DE023F0C18A958A441F2D`. Delivery filename: `AirQR-iOS-navbar-historique.ipa`. It requires the same signing/sideload method as the previous build.
 
 On a physical iPhone, validate the new analysis counter with a fixed/slow/fast QR stream, reset during scanning and immediately rescan the same QR, then sync files in both directions with the web and retry once after a network interruption. Physical throughput, camera geometry and the keyboard on the new IPA remain device validation items; local tests are not substituted for that evidence.
 
-Rollback: revert implementation commit `7cca2a9a` on this issue branch. Its parent retains the earlier iOS payload, overlay, credential and keyboard fixes. No server schema migration is introduced.
+Rollback of the keyboard/toolbar follow-up: revert `f030ac9d`. To then return to the earlier iOS payload, overlay, credential and keyboard fixes, revert implementation commit `7cca2a9a`. No server schema migration is introduced.
