@@ -61,7 +61,7 @@ The iOS patch remains pinned to `mobile_scanner` 7.1.3 and is applied to a Pods 
 
 | Command (working directory) | Result |
 | --- | --- |
-| `flutter test --no-pub` (`apps/flutter`) | 664 passed; 2 opt-in capture tests skipped. |
+| `flutter test --no-pub` (`apps/flutter`) | 664 passed; capture and live-server smoke tests are opt-in. |
 | `flutter test --no-pub test/parity_visual_capture_test.dart --dart-define=AIRQR_CAPTURE_DIR=<absolute-output-directory> --dart-define=AIRQR_MONO_FONT=C:/Windows/Fonts/consola.ttf` (`apps/flutter`) | 2 passed; 28 real-widget captures at 402×874, light/dark. The optional monospace font is only for the test renderer. |
 | `flutter test --no-pub test/history_page_refresh_test.dart` (`apps/flutter`, after final cleanup) | 19 passed. |
 | `flutter analyze --no-pub` (`apps/flutter`) | No issues. |
@@ -74,11 +74,24 @@ The iOS patch remains pinned to `mobile_scanner` 7.1.3 and is applied to a Pods 
 
 Rendered checks use Playwright CLI and the opt-in Flutter capture helper. Screenshots are review artifacts, not golden image assertions. A temporary web component harness was removed before the build/commit.
 
+### Real client interoperability smoke
+
+In addition to the seven server protocol tests, both actual client services exchanged files through a disposable loopback SQLite sync server:
+
+1. Flutter `SyncService.uploadGenerated` and `uploadScan` each uploaded 65,792 bytes (every byte value, repeated; reverse order for the scan).
+2. Chromium loaded the actual web `fetchServerHistoryFile` / `fetchServerFile` modules and verified every downloaded byte.
+3. Web `queueHistoryItem` / `queueScanComplete` uploaded the same two payloads with new IDs, awaiting both success callbacks.
+4. Flutter `fetchServerHistory` saw all four entries; `downloadFile` read both web uploads and verified every byte.
+
+Both native phases passed (one active test and one skipped in each phase); the browser reported two confirmed uploads and four shared history entries. Uploads/downloads used the real HTTP services, with HTTPS for the browser and final native download. Preferences were test fixtures; no HTTP client mock was installed. This verifies the app service implementations, not a physical iOS build's network stack or UI automation.
+
+The reusable native runner is `apps/flutter/test/live_sync_interop_test.dart`. Run it only against a disposable loopback server with `--dart-define=AIRQR_LIVE_SYNC_URL=<url>` and `--dart-define=AIRQR_LIVE_SYNC_PHASE=upload`, then exchange the payloads in the browser, then repeat with phase `download`. A HTTPS web page needs a HTTPS sync URL; the application's mixed-content protection remains enabled.
+
 ## Platform boundaries and remaining device check
 
 Native file selection, sharing, permissions and keyboard behavior remain OS controls. The browser benchmark/calibration route is browser-specific; native local hosting is native-specific. These are not represented as newly ported features. The table covers shared controls and identifies these boundaries explicitly.
 
-Review was a self-review of the diff plus executable checks; no independent reviewer was run. The iOS build is produced by [Build iOS IPA](https://github.com/Thunzyy/AirQR/actions/workflows/ios-ipa.yml). It is unsigned and requires the same signing/sideload method as the previous build.
+Review was a self-review of the diff plus executable checks; no independent reviewer was run. [iOS build 43146322312](https://github.com/Thunzyy/AirQR/actions/runs/43146322312) succeeded on implementation commit `7cca2a9a`; subsequent commits change documentation/tests only. The unsigned IPA passed ZIP integrity verification. SHA-256: `E3167E5C482F9A9C59BB4312F28D6705BCF1280834F23C319C30A2003C8C12D9`. It requires the same signing/sideload method as the previous build.
 
 On a physical iPhone, validate the new analysis counter with a fixed/slow/fast QR stream, reset during scanning and immediately rescan the same QR, then sync files in both directions with the web and retry once after a network interruption. Physical throughput, camera geometry and the keyboard on the new IPA remain device validation items; local tests are not substituted for that evidence.
 
