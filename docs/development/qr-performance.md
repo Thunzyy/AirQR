@@ -81,7 +81,7 @@ Web generation already uses workers and WASM; this change does not claim a new w
 
 Next device check: generate the same medium/large file before and after, open and close the large GIF/ZIP twice, scan a fixed and then animated QR, interrupt/resume, and compare elapsed time, unique packet progression and memory. Preserve the previously verified binary QR, reset, keyboard and toolbar behavior. Merge/deployment is a separate action; this work introduces no schema migration.
 
-## iOS delivery
+## Initial iOS delivery (before the persistence follow-up)
 
 [PR #16](https://github.com/Thunzyy/AirQR/pull/16) targets PR #14's branch. Implementation commit: `014c09a30af941f75dcaf600691a3a2b8073370c`. [Build 43225209042](https://github.com/Thunzyy/AirQR/actions/runs/43225209042) succeeded on that exact revision. The subsequent documentation commit does not change application code.
 
@@ -117,3 +117,9 @@ flutter test --no-pub --reporter expanded test/scanner_persistence_native_test.d
 The benchmark compares the previous `savePacket` + `updateProgress` blocking sequence against queue admission and final durable drain for 96 packets of 1,200 bytes. File writes and atomic flushes are real; SharedPreferences uses its test backend, so JSON work is exercised but native preferences-plugin disk latency is not measured. Admission latency and durable completion are reported separately. Neither number is camera FPS.
 
 Final measured medians on PCFIXE (three runs): previous blocking persistence 868.2 ms, new queue admission 1.859 ms, final durable completion 553.3 ms. Metadata writes fall from 96 to six. These local filesystem timings vary with host load and caches; admission measures returning to the caller, not durable storage. The storage work is still performed; it no longer blocks each ordinary camera packet. The final opt-in replay/benchmark suite passed both tests, `flutter analyze --no-pub` reported no issues, and the source whitespace check passed.
+
+### Follow-up iOS delivery
+
+Implementation commits: `efa76adde547fd9f182d04c6e703226a5d6e1db1` and `f1699e066eaf2677002011c07bcd0d5e9be060ae`. [Build 43236107564](https://github.com/Thunzyy/AirQR/actions/runs/43236107564) succeeded on the latter exact revision, using Flutter 3.38.6, locked dependencies and `flutter build ios --release --no-codesign --no-pub`. The preliminary build on `efa76add` was cancelled before delivery so the final artifact includes failed-session-switch recovery.
+
+The new `AirQR-iOS-scan-fluide.ipa` passed ZIP integrity and arm64 Mach-O checks (23,680,637 bytes). SHA-256: `583D5E463F04D6BDEE084A8B1B0CFD4FF6373E3FDA93938A12B6EFC5545DB89E`. It is unsigned and requires the usual signing/sideload method. The test logs, native measurements and artifact receipt are collected in `AirQR-flutter-scan-verifications.zip` for this session. Physical iPhone validation remains outstanding. Roll back only this follow-up by reverting `f1699e06`, then `efa76add`; saved packet format is unchanged.
