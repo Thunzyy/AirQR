@@ -1,0 +1,60 @@
+require 'digest'
+require 'fileutils'
+
+platform :osx, '10.15'
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  settings = File.join(__dir__, 'Flutter', 'ephemeral', 'Flutter-Generated.xcconfig')
+  raise "#{settings} is missing. Run flutter pub get first." unless File.file?(settings)
+  File.foreach(settings) do |line|
+    match = line.match(/^FLUTTER_ROOT=(.*)/)
+    return match[1].strip if match
+  end
+  raise "FLUTTER_ROOT is missing from #{settings}"
+end
+
+require File.join(flutter_root, 'packages', 'flutter_tools', 'bin', 'podhelper')
+flutter_macos_podfile_setup
+
+target 'Runner' do
+  use_frameworks!
+  flutter_install_all_macos_pods __dir__
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_macos_build_settings(target)
+  end
+
+  # Apple Vision returns QR codewords, not the binary payload. Use the same
+  # verified byte-segment extraction as the iPhone build.
+  scanner = installer.pods_project.targets.find { |target| target.name == 'mobile_scanner' }
+  source = scanner&.source_build_phase&.files_references&.find do |reference|
+    File.basename(reference.path.to_s) == 'MobileScannerPlugin.swift'
+  end
+  raise 'Could not find the mobile_scanner macOS source' unless source
+  original = File.binread(source.real_path)
+  expected_sha = '5aa12a9f7ba9c9243849a2c7eb6451a862796152869fc0d55c3b65a90e29ea22'
+  unless Digest::SHA256.hexdigest(original) == expected_sha
+    raise 'Update the AirQR Apple camera patch for the installed mobile_scanner version'
+  end
+  patched = installer.sandbox.root.join('AirQRMobileScanner', 'MobileScannerPlugin.swift')
+  FileUtils.mkdir_p(patched.dirname)
+  File.binwrite(patched, original)
+  patch_file = File.expand_path('../ios/mobile_scanner-7.1.3.patch', __dir__)
+  unless system('git', '-C', patched.dirname.to_s, 'apply', '--no-index', '--unidiff-zero', patch_file)
+    raise 'Could not apply the AirQR Apple camera patch'
+  end
+  source.path = patched.to_s
+  source.source_tree = '<absolute>'
+end

@@ -1,0 +1,33 @@
+# Git
+.git/
+.gitignore
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Storage (runtime data)
+storage/
+users.json
+users.json.session-secret
+*.db
+
+# TLS certs (local dev)
+*.pem
+
+# Logs
+*.log
+
+# Docker configs
+docker-compose*.yml
+cloudflared/
+deploy/
+
+# Dev artifacts
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Documentation
+README.md

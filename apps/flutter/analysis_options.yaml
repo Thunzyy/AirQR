@@ -1,0 +1,32 @@
+# This file configures the analyzer, which statically analyzes Dart code to
+# check for errors, warnings, and lints.
+#
+# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
+# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
+# invoked from the command line by running `flutter analyze`.
+
+# The following line activates a set of recommended lints for Flutter apps,
+# packages, and plugins designed to encourage good coding practices.
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  exclude:
+    - build/**
+    - rust_builder/**
+    - lib/src/rust/**
+    - lib/l10n/**
+
+linter:
+  # Dart equivalent of the web anti-slop contract: no untyped JSON bags, no
+  # dynamic call sites, no implicit downcasts. Parse at trust boundaries via
+  # lib/parse/wire.dart instead of Map<String, dynamic> and `as T`.
+  rules:
+    avoid_dynamic_calls: true
+    avoid_annotating_with_dynamic: true
+    always_declare_return_types: true
+    prefer_typing_uninitialized_variables: true
+    avoid_types_as_parameter_names: true

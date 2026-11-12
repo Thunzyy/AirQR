@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=AirQR Desktop
+Comment=AirQR file transfer via QR
+Exec=airqr_desktop
+Icon=airqr_desktop
+Terminal=false
+Type=Application
+Categories=Utility;
+StartupWMClass=airqr_desktop
+
