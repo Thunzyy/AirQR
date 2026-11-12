@@ -1,0 +1,109 @@
+# ─── Rust ───────────────────────────────────────────────────────────────
+/target
+/debug
+**/*.rs.bk
+packages/airqr-core/target/*
+packages/airqr-core/img2webp.exe
+
+# ─── Node / web ─────────────────────────────────────────────────────────
+node_modules/
+dist/
+apps/web/playwright-report/
+apps/web/test-results/
+.playwright-mcp/
+
+# Generated single-file bundles (rebuilt by build/ scripts)
+apps/web/public/airqr-portable.html
+apps/web/public/linksites/
+
+# ─── Flutter ────────────────────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+apps/flutter/rust/.cargo/
+apps/flutter/rust/build_log.txt
+
+# Flutter and native toolchains write build/ output at several levels, so the
+# pattern stays broad; the repo's own build scripts and test suites are kept.
+build/
+!/build/
+!/build/*.py
+!/build/README.md
+!tests/**/build/
+
+# ─── Android ────────────────────────────────────────────────────────────
+android/app/libs/
+android/idea/
+android/.gradle/
+android/build/
+android/local.properties
+android/*.iml
+android/.idea
+
+# ─── iOS ────────────────────────────────────────────────────────────────
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/App.framework
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+
+# ─── Python ─────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ─── Tests & reports ────────────────────────────────────────────────────
+tests/.ngrok_url
+tests/chrome_profile/
+tests/reports/*
+!tests/reports/.gitkeep
+tests/test_data/*
+tests/web/test_data/*
+reports/*
+e2e_results/*
+qr_outputs/*
+data_test/*
+lighthouse*.json
+
+# ─── Runtime data & secrets ─────────────────────────────────────────────
+.env
+!.env.example
+*.pem
+*.session-secret
+*.json.lock
+services/sync-server/storage/
+services/sync-server/users.json
+
+# ─── Local dev outputs ──────────────────────────────────────────────────
+tmp/
+tmp-pytest/
+.tmp/
+.tmp-*/
+artifacts/
+*.log
+*.gif
+*.mp4
+*.mkv
+
+# ─── Editors & OS ───────────────────────────────────────────────────────
+.DS_Store
+.idea/
+*.iml
+.vscode/
+
+# ─── Local notes and third-party binaries ───────────────────────────────
+.private-docs/
+.local-dev/
+.worktrees/
+tools/sysinternals/
+
+# Published documentation animation
+!docs/blog/assets/benchmark-5560/benchmark_gif.gif
+!docs/blog/assets/benchmark-5560/ltcodes.gif

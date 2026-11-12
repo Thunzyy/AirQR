@@ -1,0 +1,326 @@
+--- a/MobileScannerPlugin.swift
++++ b/MobileScannerPlugin.swift
+@@ -1,4 +1,5 @@
+ import AVFoundation
++import CoreImage
+ import Vision
+ import VideoToolbox
+ 
+@@ -91,6 +92,8 @@
+     
+     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+         switch call.method {
++        case "airqrAnalysisFps":
++            result(readAnalysisFps())
+         case "state":
+             checkPermission(call, result)
+         case "request":
+@@ -140,7 +143,28 @@
+     }
+     
+     var nextScanTime = 0.0
+-    var imagesCurrentlyBeingProcessed = false
++    private let decodeSlot = DispatchSemaphore(value: 1)
++    // Capture callbacks and method-channel reads run on different queues.
++    private let analysisRateLock = NSLock()
++    private var analysisFrames = 0
++    private var analysisWindowStart = ProcessInfo.processInfo.systemUptime
++
++    private func recordAnalysisFrame() {
++        analysisRateLock.lock()
++        analysisFrames += 1
++        analysisRateLock.unlock()
++    }
++
++    private func readAnalysisFps() -> Double {
++        let now = ProcessInfo.processInfo.systemUptime
++        analysisRateLock.lock()
++        defer { analysisRateLock.unlock() }
++        let elapsed = max(now - analysisWindowStart, 0.001)
++        let fps = Double(analysisFrames) / elapsed
++        analysisFrames = 0
++        analysisWindowStart = now
++        return fps
++    }
+     
+     // Gets called when a new image is added to the buffer
+     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+@@ -154,109 +178,103 @@
+         latestBuffer = imageBuffer
+         registry.textureFrameAvailable(textureId)
+         
+-        let currentTime = Date().timeIntervalSince1970
+-        let eligibleForScan = currentTime > nextScanTime && !imagesCurrentlyBeingProcessed
+-        if ((detectionSpeed == DetectionSpeed.normal || detectionSpeed == DetectionSpeed.noDuplicates) && eligibleForScan || detectionSpeed == DetectionSpeed.unrestricted) {
+-            nextScanTime = currentTime + timeoutSeconds
+-            imagesCurrentlyBeingProcessed = true
+-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+-                guard let self = self else {
+-                    return
+-                }
+-                
+-                guard let buffer = self.latestBuffer else {
+-                    self.imagesCurrentlyBeingProcessed = false
+-                    return
+-                }
+-                
+-                var cgImage: CGImage? = nil
+-                
+-                let status = VTCreateCGImageFromCVPixelBuffer(buffer, options: nil, imageOut: &cgImage)
+-                
+-                guard status == kCVReturnSuccess, let currentImage = cgImage else {
+-                    self.imagesCurrentlyBeingProcessed = false
+-                    return
+-                }
+-                
+-                let imageRequestHandler = VNImageRequestHandler(cgImage: currentImage)
+-                
+-                do {
+-                    let barcodeRequest: VNDetectBarcodesRequest = VNDetectBarcodesRequest(completionHandler: { [weak self] (request, error) in
+-                        self?.imagesCurrentlyBeingProcessed = false
+-
+-                        if error != nil {
+-                            DispatchQueue.main.async {
+-                                self?.sink?(FlutterError(
+-                                    code: MobileScannerErrorCodes.BARCODE_ERROR,
+-                                    message: error?.localizedDescription, details: nil))
+-                            }
+-                            return
+-                        }
+-
+-                        guard let results: [VNBarcodeObservation] = request.results as? [VNBarcodeObservation] else {
+-                            return
+-                        }
+-
+-                        if results.isEmpty {
+-                            return
+-                        }
+-
+-                        let barcodes: [VNBarcodeObservation] = results.compactMap({ barcode in
+-                            return barcode
+-                        })
+-                        
+-                        var bytes: FlutterStandardTypedData? = nil
+-                        
+-                        if MobileScannerPlugin.returnImage,
+-                           let imageBytes = currentImage.jpegData(compressionQuality: 0.8) {
+-                            bytes = FlutterStandardTypedData(bytes: imageBytes)
+-                        }
+-
+-                        DispatchQueue.main.async {
+-                            let imageData: [String: Any?] = [
+-                                "bytes": bytes,
+-                                "width": Double(currentImage.width),
+-                                "height": Double(currentImage.height),
+-                            ]
+-
+-                            self?.sink?([
+-                                "name": "barcode",
+-                                "image": imageData,
+-                                "data": barcodes.map({
+-                                    $0.toMap(
+-                                        imageWidth: currentImage.width,
+-                                        imageHeight: currentImage.height,
+-                                        scanWindow: self?.scanWindow
+-                                    )
+-                                }),
+-                            ])
+-                        }
+-                    })
+-
+-                    if self.symbologies.isEmpty == false {
+-                        // Add the symbologies the user wishes to support.
+-                        barcodeRequest.symbologies = self.symbologies
++        let currentTime = ProcessInfo.processInfo.systemUptime
++        guard detectionSpeed == .unrestricted || currentTime >= nextScanTime,
++              decodeSlot.wait(timeout: .now()) == .success else {
++            return
++        }
++        nextScanTime = currentTime + timeoutSeconds
++        recordAnalysisFrame()
++
++        let session = captureSession
++        let scanWindow = self.scanWindow
++        let symbologies = self.symbologies
++        let returnImage = MobileScannerPlugin.returnImage
++        let width = CVPixelBufferGetWidth(imageBuffer)
++        let height = CVPixelBufferGetHeight(imageBuffer)
++        DispatchQueue.global(qos: .userInitiated).async { [weak self, decodeSlot = self.decodeSlot] in
++            defer { decodeSlot.signal() }
++            let request = VNDetectBarcodesRequest()
++            if !symbologies.isEmpty {
++                request.symbologies = symbologies
++            }
++            if let scanWindow = scanWindow {
++                request.regionOfInterest = scanWindow
++            }
++
++            do {
++                try VNImageRequestHandler(cvPixelBuffer: imageBuffer, options: [:]).perform([request])
++                guard let barcodes = request.results, !barcodes.isEmpty else { return }
++
++                var bytes: FlutterStandardTypedData?
++                if returnImage {
++                    var image: CGImage?
++                    if VTCreateCGImageFromCVPixelBuffer(imageBuffer, options: nil, imageOut: &image) == kCVReturnSuccess,
++                       let imageBytes = image?.jpegData(compressionQuality: 0.8) {
++                        bytes = FlutterStandardTypedData(bytes: imageBytes)
+                     }
+-
+-                    // Set the region of interest to match scanWindow
+-                    if let scanWindow = self.scanWindow {
+-                        barcodeRequest.regionOfInterest = scanWindow
+-                    }
+-
+-                    try imageRequestHandler.perform([barcodeRequest])
+-                } catch let error {
+-                    imagesCurrentlyBeingProcessed = false
+-                    
+-                    DispatchQueue.main.async {
+-                        self.sink?(FlutterError(
+-                            code: MobileScannerErrorCodes.BARCODE_ERROR,
+-                            message: error.localizedDescription, details: nil))
+-                    }
+-                }
+-            }
+-        }
+-    }
+-    
++                }
++
++                let imageData: [String: Any?] = [
++                    "bytes": bytes,
++                    "width": Double(width),
++                    "height": Double(height),
++                ]
++                let results = barcodes.map { barcode in
++                    barcode.toMap(imageWidth: width, imageHeight: height, scanWindow: scanWindow)
++                }
++                DispatchQueue.main.async { [weak self] in
++                    guard let self = self, self.captureSession === session else { return }
++                    self.sink?(["name": "barcode", "image": imageData, "data": results])
++                }
++            } catch {
++                DispatchQueue.main.async { [weak self] in
++                    guard let self = self, self.captureSession === session else { return }
++                    self.sink?(FlutterError(code: MobileScannerErrorCodes.BARCODE_ERROR,
++                                            message: error.localizedDescription, details: nil))
++                }
++            }
++        }
++    }
++
++#if os(iOS)
++    private func maximumFrameRate(_ camera: AVCaptureDevice) -> Double {
++        camera.formats.flatMap { $0.videoSupportedFrameRateRanges }
++            .map { $0.maxFrameRate }.max() ?? 0
++    }
++
++    private func configureHighFrameRate(_ camera: AVCaptureDevice) {
++        let referencePixels = Int64(1920 * 1080)
++        let formats = camera.formats.flatMap { format in
++            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
++            let pixels = Int64(dimensions.width) * Int64(dimensions.height)
++            return format.videoSupportedFrameRateRanges.map { range in
++                (format: format, range: range, distance: abs(referencePixels - pixels))
++            }
++        }
++        guard let fastest = formats.max(by: { lhs, rhs in
++            if lhs.range.maxFrameRate != rhs.range.maxFrameRate {
++                return lhs.range.maxFrameRate < rhs.range.maxFrameRate
++            }
++            return lhs.distance > rhs.distance
++        }), fastest.range.maxFrameRate > 30 else {
++            return
++        }
++
++        do {
++            try camera.lockForConfiguration()
++            defer { camera.unlockForConfiguration() }
++            // Choosing the active format selects input-priority mode on iOS.
++            camera.activeFormat = fastest.format
++            camera.activeVideoMinFrameDuration = fastest.range.minFrameDuration
++            camera.activeVideoMaxFrameDuration = fastest.range.minFrameDuration
++            NSLog("AirQR camera requested %.2f FPS", fastest.range.maxFrameRate)
++        } catch {
++            NSLog("AirQR camera kept its default format: %@", error.localizedDescription)
++        }
++    }
++#endif
++
+     func checkPermission(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
+         if #available(iOS 12.0, macOS 10.14, *) {
+             let status = AVCaptureDevice.authorizationStatus(for: .video)
+@@ -412,6 +430,15 @@
+                                 details: nil))
+             return
+         }
++#if os(iOS)
++        if detectionSpeed == .unrestricted,
++           let selected = device,
++           let wideAngle = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position),
++           maximumFrameRate(wideAngle) > maximumFrameRate(selected) {
++            device = wideAngle
++        }
++#endif
++
+ 
+         device.addObserver(self, forKeyPath: #keyPath(AVCaptureDevice.torchMode), options: .new, context: nil)
+ #if os(iOS)
+@@ -475,6 +502,11 @@
+                 connection.isVideoMirrored = true
+             }
+         }
++#if os(iOS)
++        if detectionSpeed == .unrestricted {
++            configureHighFrameRate(device)
++        }
++#endif
+ 
+         captureSession!.commitConfiguration()
+ 
+@@ -1040,6 +1072,29 @@
+ }
+ 
+ extension VNBarcodeObservation {
++    private func airqrBytePayload(_ descriptor: CIQRCodeDescriptor) -> Data? {
++        let codewords = [UInt8](descriptor.errorCorrectedPayload)
++        // AirQR encoders emit a single byte-mode segment. The mode and
++        // character count leave the message four bits off byte alignment.
++        let countBytes = descriptor.symbolVersion < 10 ? 1 : 2
++        guard codewords.count > countBytes, codewords[0] >> 4 == 0b0100 else {
++            return nil
++        }
++        var count = Int(codewords[0] & 0x0f)
++        for index in 1..<countBytes {
++            count = (count << 8) | Int(codewords[index])
++        }
++        count = (count << 4) | Int(codewords[countBytes] >> 4)
++        guard count > 0, count <= codewords.count - countBytes - 1 else {
++            return nil
++        }
++        let end = countBytes + count
++        guard codewords[end] & 0x0f == 0 else { return nil }
++        return Data((countBytes..<end).map { index in
++            (codewords[index] << 4) | (codewords[index + 1] >> 4)
++        })
++    }
++
+     private func distanceBetween(_ p1: CGPoint, _ p2: CGPoint) -> CGFloat {
+         return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2))
+     }
+@@ -1089,8 +1144,12 @@
+         let width = distanceBetween(adjustedTopLeft, adjustedTopRight) * CGFloat(imageWidth)
+         let height = distanceBetween(adjustedTopLeft, adjustedBottomLeft) * CGFloat(imageHeight)
+         var rawBytes: FlutterStandardTypedData? = nil
+-        
+-        if #available(iOS 17.0, macOS 14.0, *) {
++        if symbology == .qr {
++            if let descriptor = barcodeDescriptor as? CIQRCodeDescriptor,
++               let payload = airqrBytePayload(descriptor) {
++                rawBytes = FlutterStandardTypedData(bytes: payload)
++            }
++        } else if #available(iOS 17.0, macOS 14.0, *) {
+             if let payloadData = payloadData {
+                 rawBytes = FlutterStandardTypedData(bytes: payloadData)
+             }

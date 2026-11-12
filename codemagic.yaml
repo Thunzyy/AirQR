@@ -1,0 +1,31 @@
+workflows:
+  airqr-ios-ipa:
+    name: AirQR iOS IPA (unsigned)
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      flutter: '3.38.6'
+      xcode: '16.4'
+    scripts:
+      - name: Build Flutter for iPhone
+        script: |
+          set -euo pipefail
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          fi
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup target add aarch64-apple-ios
+          cd apps/flutter
+          flutter pub get --enforce-lockfile
+          flutter build ios --release --no-codesign --no-pub
+      - name: Package and verify the IPA
+        script: |
+          set -euo pipefail
+          cd apps/flutter/build/ios/iphoneos
+          test -f Runner.app/Info.plist
+          mkdir -p Payload
+          ditto Runner.app Payload/Runner.app
+          ditto -c -k --keepParent Payload AirQR.ipa
+          unzip -tq AirQR.ipa
+    artifacts:
+      - apps/flutter/build/ios/iphoneos/AirQR.ipa

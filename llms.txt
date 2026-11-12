@@ -1,0 +1,29 @@
+# AirQR
+
+> Open-source air-gapped file transfer through animated QR codes and RaptorQ fountain codes. No cable, internet, Bluetooth, or pairing. MIT license. Author: Lucas Poignard. Inspired by divan/txqr.
+
+AirQR encodes a file into a looping QR-code GIF. A second device scans the screen and rebuilds the original locally. Missing frames are tolerated. Typical throughput ~8 KB/s on iPhone 12 / laptop. Not a Wi-Fi replacement; use it when pairing or a network is unavailable.
+
+## Canonical URLs
+
+- Source: https://github.com/Thunzyy/AirQR
+- Demo: https://airqr-demo.pgnrd.fr
+- Downloads: https://get-airqr.pgnrd.fr
+- Google Play: https://play.google.com/store/apps/details?id=com.airqr.mobile
+- Microsoft Store: https://apps.microsoft.com/detail/9P90L5TKGMD5
+- Blog (English): https://lucas.pgnrd.fr/en/blog/airqr
+- App Store: coming soon
+- Issues: https://github.com/Thunzyy/AirQR/issues
+
+## Docs
+
+- [README.md](README.md): definition, how it works, quick start, FAQ, comparison
+- [docs/deployment/README.md](docs/deployment/README.md): local installation and Docker
+- [docs/architecture/README.md](docs/architecture/README.md): system diagrams and deep dive
+- [docs/blog/airqr-animated-qr-transfer.mdx](docs/blog/airqr-animated-qr-transfer.mdx): English technical article and 5,560-run benchmark
+- [docs/blog/airqr-transfert-qr-anime.mdx](docs/blog/airqr-transfert-qr-anime.mdx): French version of the same article
+- [services/sync-server/README.md](services/sync-server/README.md): optional resume / multi-device sync
+
+## Stack
+
+Rust (`packages/airqr-core`) → WASM (web) and Flutter FFI (mobile/desktop). Optional Python sync server. Portable single-file HTML via `build/web_singlefile.py`.

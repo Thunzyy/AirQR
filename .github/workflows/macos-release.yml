@@ -1,0 +1,57 @@
+name: Build macOS app
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    runs-on: macos-15
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: apps/flutter
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.6'
+          channel: stable
+          cache: true
+      - name: Set up universal Rust targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Build the release app
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter build macos --release --no-pub
+      - name: Verify, launch and package
+        run: |
+          app=build/macos/Build/Products/Release/AirQR.app
+          test -f "$app/Contents/Info.plist"
+          lipo "$app/Contents/MacOS/AirQR" -verify_arch arm64 x86_64
+          lipo "$app/Contents/MacOS/AirQR" -archs
+          codesign --force --deep --sign - --entitlements macos/Runner/Release.entitlements "$app"
+          codesign --verify --deep --strict "$app"
+          "$app/Contents/MacOS/AirQR" > macos-launch.log 2>&1 &
+          app_pid=$!
+          sleep 10
+          kill -0 "$app_pid"
+          screencapture -x macos-launch.png || true
+          kill "$app_pid"
+          mkdir -p build/macos/package
+          ditto -c -k --sequesterRsrc --keepParent "$app" build/macos/package/AirQR-macos-universal.zip
+          unzip -tq build/macos/package/AirQR-macos-universal.zip
+          shasum -a 256 build/macos/package/AirQR-macos-universal.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: airqr-macos
+          path: |
+            apps/flutter/build/macos/package/AirQR-macos-universal.zip
+            apps/flutter/macos-launch.log
+            apps/flutter/macos-launch.png
+          if-no-files-found: error
