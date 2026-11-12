@@ -83,6 +83,7 @@ interface HistoryProps {
   onRefresh?: () => void;
   onClearHistory?: () => void;
   isSyncing?: boolean;
+  pendingSyncItemIds?: ReadonlySet<string>;
   isClearingHistory?: boolean;
   syncEnabled?: boolean;
   syncAuthRequired?: boolean;
@@ -112,6 +113,7 @@ const History: React.FC<HistoryProps> = ({
   onRefresh,
   onClearHistory,
   isSyncing = false,
+  pendingSyncItemIds,
   isClearingHistory = false,
   syncEnabled = false,
   syncAuthRequired = false,
@@ -332,7 +334,7 @@ const History: React.FC<HistoryProps> = ({
   const selectableCount = filteredItems.length + filteredIncompleteItems.length;
   const allVisibleSelected = selectableCount > 0 && selectedCount === selectableCount;
   const syncableSelectedItems = selectedItems.filter(
-    (item) => item.isLocalOnly || item.syncFailed
+    (item) => item.source !== 'server' && (!item.isSynced || item.isLocalOnly || item.syncFailed)
   );
   const detachableSelectedItems = selectedItems.filter(
     (item) => item.isSynced && !item.isLocalOnly
@@ -566,10 +568,10 @@ const History: React.FC<HistoryProps> = ({
             </div>
           </div>
         ) : (
-        <div className="flex items-center justify-end gap-2">
+        <div data-testid="history-toolbar" className="flex flex-wrap items-center justify-end gap-2">
           {syncStatusLabel ? (
             <span
-              className={`mr-auto inline-flex max-w-[128px] items-center truncate rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-wide ${
+              className={`mr-auto inline-flex max-w-full shrink-0 items-center rounded-full border px-3 py-2 text-[10px] font-bold uppercase tracking-wide ${
                 syncStatusClassName ||
                 "border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)]"
               }`}
@@ -577,6 +579,7 @@ const History: React.FC<HistoryProps> = ({
               {syncStatusLabel}
             </span>
           ) : null}
+          <div className="ml-auto flex flex-wrap justify-end gap-2">
           <button
             type="button"
             onClick={() => {
@@ -587,7 +590,7 @@ const History: React.FC<HistoryProps> = ({
               }
               setSearchOpen(true);
             }}
-            className={`flex size-12 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] shadow-[0_16px_44px_rgba(56,83,105,0.20)] transition-colors hover:bg-[var(--airqr-action-hover)] ${
+            className={`flex size-12 shrink-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] shadow-[0_16px_44px_rgba(56,83,105,0.20)] transition-colors hover:bg-[var(--airqr-action-hover)] ${
               searchOpen || query ? "text-[var(--airqr-text-primary)]" : "text-[var(--airqr-text-secondary)]"
             }`}
             aria-label={t('history.searchHistory')}
@@ -602,7 +605,7 @@ const History: React.FC<HistoryProps> = ({
               setSelectionMode(true);
             }}
             disabled={!hasAnyHistory}
-            className="flex size-12 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex size-12 shrink-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={t("history.selectItems")}
             title={t("history.selectItems")}
           >
@@ -613,7 +616,7 @@ const History: React.FC<HistoryProps> = ({
             <button
               type="button"
               onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
-              className="flex size-12 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)]"
+              className="flex size-12 shrink-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)]"
               aria-label={t('history.sortTitle')}
               title={t('history.sortTitle')}
             >
@@ -648,7 +651,7 @@ const History: React.FC<HistoryProps> = ({
             <button
               type="button"
               onClick={onRefresh}
-              className="flex size-12 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)]"
+              className="flex size-12 shrink-0 items-center justify-center rounded-full border border-[var(--airqr-control-border)] bg-[var(--airqr-action-surface)] text-[var(--airqr-text-secondary)] transition-colors hover:bg-[var(--airqr-action-hover)] hover:text-[var(--airqr-text-primary)]"
               aria-label={t('common.refresh')}
               title={t('common.refresh')}
             >
@@ -660,7 +663,7 @@ const History: React.FC<HistoryProps> = ({
               type="button"
               onClick={onSyncToServer}
               disabled={isSyncing}
-              className={`flex size-12 items-center justify-center rounded-full border transition-colors ${
+              className={`flex size-12 shrink-0 items-center justify-center rounded-full border transition-colors ${
                 isSyncing
                 ? "airqr-action-button cursor-not-allowed"
                   : "airqr-action-button airqr-action-button-accent"
@@ -679,7 +682,7 @@ const History: React.FC<HistoryProps> = ({
               type="button"
               onClick={onClearHistory}
               disabled={isClearingHistory || !hasAnyHistory}
-              className={`flex size-12 items-center justify-center rounded-full border transition-colors ${
+              className={`flex size-12 shrink-0 items-center justify-center rounded-full border transition-colors ${
                 isClearingHistory || !hasAnyHistory
                   ? "airqr-action-button cursor-not-allowed"
                   : "airqr-action-button airqr-action-button-danger"
@@ -693,6 +696,7 @@ const History: React.FC<HistoryProps> = ({
               />
             </button>
           )}
+          </div>
         </div>
         )}
 
@@ -915,10 +919,12 @@ const History: React.FC<HistoryProps> = ({
                         }}
                         className="airqr-action-button flex size-10 shrink-0 items-center justify-center rounded-full transition-colors"
                         title={t('history.syncIncompleteToServer')}
+                        disabled={pendingSyncItemIds?.has(`scan:${item.sessionId}`)}
+                        aria-busy={pendingSyncItemIds?.has(`scan:${item.sessionId}`)}
                       >
                         <Icon
-                          name="cloud_upload"
-                          className="airqr-sync-icon"
+                          name={pendingSyncItemIds?.has(`scan:${item.sessionId}`) ? 'sync' : 'cloud_upload'}
+                          className={`airqr-sync-icon ${pendingSyncItemIds?.has(`scan:${item.sessionId}`) ? 'animate-spin' : ''}`}
                         />
                       </button>
                     )}
@@ -990,6 +996,7 @@ const History: React.FC<HistoryProps> = ({
                   onView={onView}
                   onKeepLocal={onKeepLocal}
                   onSyncItem={onSyncItem}
+                  syncing={pendingSyncItemIds?.has(item.id)}
                   selectionMode={selectionMode}
                   selected={selectionMode && selectedItemIds.has(item.id)}
                   onToggleSelected={toggleItemSelection}
@@ -1048,6 +1055,7 @@ const HistoryListItem: React.FC<{
   onView?: (item: HistoryItem) => void;
   onKeepLocal?: (item: HistoryItem) => void;
   onSyncItem?: (item: HistoryItem) => void;
+  syncing?: boolean;
   selectionMode?: boolean;
   selected?: boolean;
   onToggleSelected?: (item: HistoryItem) => void;
@@ -1059,6 +1067,7 @@ const HistoryListItem: React.FC<{
   onView,
   onKeepLocal,
   onSyncItem,
+  syncing = false,
   selectionMode = false,
   selected = false,
   onToggleSelected,
@@ -1071,7 +1080,7 @@ const HistoryListItem: React.FC<{
   // Show sync failed indicator
   const showSyncFailed = item.syncFailed && !item.isLocalOnly;
   // Show sync button if item is local-only (was detached from server) OR if sync failed (to retry)
-  const showSyncButton = item.isLocalOnly || item.syncFailed;
+  const showSyncButton = item.source !== "server" && (!item.isSynced || item.isLocalOnly || item.syncFailed);
 
   const handleRowClick = () => {
     if (selectionMode) {
@@ -1162,11 +1171,13 @@ const HistoryListItem: React.FC<{
                 ? "airqr-action-button-danger"
                 : "airqr-action-button-accent"
             }`}
+            disabled={syncing}
+            aria-busy={syncing}
             title={item.syncFailed ? t('history.retrySync') : t('history.syncToServerItem')}
           >
             <Icon
-              name={item.syncFailed ? "sync" : "cloud_upload"}
-              className="airqr-sync-icon"
+              name={syncing || item.syncFailed ? "sync" : "cloud_upload"}
+              className={`airqr-sync-icon ${syncing ? "animate-spin" : ""}`}
             />
           </button>
         )}

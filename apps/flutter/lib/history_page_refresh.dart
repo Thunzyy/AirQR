@@ -17,11 +17,15 @@ class HistoryPageSnapshot {
   final List<HistoryItem> items;
   final List<IncompleteScan> incompleteScans;
   final bool syncEnabled;
+  final bool connected;
+  final SyncResult? syncResult;
 
   const HistoryPageSnapshot({
     required this.items,
     required this.incompleteScans,
     required this.syncEnabled,
+    this.connected = false,
+    this.syncResult,
   });
 }
 
@@ -101,7 +105,6 @@ typedef HistoryIncompleteScanLoader = Future<List<IncompleteScan>> Function();
 class HistoryPageRefreshController {
   static const int remoteHistoryLimit = 500;
 
-  final Duration syncInterval;
   final Future<SyncResult> Function() _syncAll;
   final Future<ServerHistoryFetchResult> Function() _fetchServerHistory;
   final HistoryRemoteFileDownloader _downloadFile;
@@ -110,10 +113,8 @@ class HistoryPageRefreshController {
   final Map<String, Future<HistoryMaterializationResult>> _materializations =
       <String, Future<HistoryMaterializationResult>>{};
   final Map<String, int> _materializationGenerations = <String, int>{};
-  DateTime? _lastSyncTime;
 
   HistoryPageRefreshController({
-    this.syncInterval = const Duration(seconds: 10),
     Future<SyncResult> Function()? syncAll,
     Future<ServerHistoryFetchResult> Function()? fetchServerHistory,
     HistoryRemoteFileDownloader? downloadFile,
@@ -133,25 +134,26 @@ class HistoryPageRefreshController {
     final settings = await SyncSettingsService.load();
     final syncEnabled = settings.isConfigured && settings.enabled;
 
+    SyncResult? syncResult;
     if (syncEnabled && forceSync) {
-      final now = DateTime.now();
-      final shouldSync =
-          _lastSyncTime == null ||
-          now.difference(_lastSyncTime!) > syncInterval;
-
-      if (shouldSync) {
-        _lastSyncTime = now;
-        await _syncAll();
+      // The service coalesces concurrent syncs. An explicit retry must never
+      // be silently skipped by the automatic-refresh cooldown.
+      try {
+        syncResult = await _syncAll();
+      } catch (error) {
+        syncResult = SyncResult.error(error.toString());
       }
     }
 
     final localItems = await HistoryService.getHistory();
     var items = localItems;
     var unifiedServerItems = const <ServerHistoryItem>[];
+    var connected = false;
     if (syncEnabled) {
       try {
         final remoteResult = await _fetchServerHistory();
         if (remoteResult is ServerHistorySnapshot) {
+          connected = true;
           unifiedServerItems = remoteResult.items;
           items = _mergeCompletedServerItems(localItems, remoteResult.items);
         }
@@ -169,6 +171,8 @@ class HistoryPageRefreshController {
       items: items,
       incompleteScans: incompleteScans,
       syncEnabled: syncEnabled,
+      connected: connected,
+      syncResult: syncResult,
     );
   }
 
@@ -535,7 +539,6 @@ class HistoryPageRefreshController {
         serverId: sessionId,
       );
 
-      _lastSyncTime = DateTime.now();
       return HistoryCompletedScanDownloadResult.downloaded(
         sessionId: sessionId,
         filename: filename,

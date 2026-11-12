@@ -55,18 +55,18 @@ void main() {
 
     expect(find.text('GIF or ZIP file'), findsOneWidget);
     expect(find.text('Drop a GIF or ZIP file to decode'), findsNothing);
-    expect(find.text('Tap to select a GIF file'), findsOneWidget);
+    expect(find.text('Tap to select a GIF file'), findsNWidgets(2));
     expect(
       find.text(
         'Decode only works with GIFs created by AirQR, not a regular photo GIF.',
       ),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(find.text('Try a sample GIF'), findsOneWidget);
+    expect(find.text('Try a sample GIF'), findsNothing);
     final pickerIconFinder = find.byKey(const Key('decoder_file_picker_icon'));
     final pickerIcon = tester.widget<Container>(pickerIconFinder);
     final pickerIconDecoration = pickerIcon.decoration as BoxDecoration;
-    expect(tester.getSize(pickerIconFinder), const Size(52, 52));
+    expect(tester.getSize(pickerIconFinder), const Size(64, 64));
     expect(pickerIcon.alignment, Alignment.center);
     expect(pickerIconDecoration.shape, BoxShape.circle);
     expect(pickerIconDecoration.color, AirQrTheme.lightIconSurface);

@@ -54,8 +54,8 @@ class SettingsCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: backgroundColor,
-        borderRadius: AirQrRadii.card,
-        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(34),
+        boxShadow: AirQrTheme.softShadow(context),
       ),
       child: Column(children: children),
     );
@@ -69,7 +69,7 @@ class SettingsCardDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Divider(height: 1, color: color);
+    return Divider(height: 1, indent: 20, endIndent: 20, color: color);
   }
 }
 
@@ -171,12 +171,20 @@ class SettingsSliderTile extends StatelessWidget {
 
     final labelText = Text(
       label,
-      style: TextStyle(color: primaryTextColor, fontWeight: FontWeight.w500),
+      style: TextStyle(
+        color: primaryTextColor,
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+      ),
     );
     final valueText = Text(
       '${decimals > 0 ? value.toStringAsFixed(decimals) : value.round()}$suffix',
       textAlign: TextAlign.right,
-      style: TextStyle(color: primaryTextColor, fontWeight: FontWeight.bold),
+      style: TextStyle(
+        color: primaryTextColor,
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+      ),
     );
 
     return LayoutBuilder(
@@ -210,6 +218,11 @@ class SettingsSliderTile extends StatelessWidget {
                   inactiveTrackColor: inactiveTrackColor,
                   thumbColor: sliderThumbColor,
                   overlayColor: sliderFillColor.withValues(alpha: 0.2),
+                  trackHeight: 8,
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 9,
+                  ),
+                  trackShape: const RoundedRectSliderTrackShape(),
                 ),
                 child: Slider(
                   value: value,
@@ -269,7 +282,7 @@ class SettingsDropdownTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: fieldBackgroundColor,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(24),
             border: Border.all(color: borderColor),
           ),
           child: DropdownButton<String>(
@@ -280,6 +293,8 @@ class SettingsDropdownTile extends StatelessWidget {
             underline: const SizedBox(),
             isDense: false,
             style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 14,
               color: primaryTextColor,
               fontWeight: FontWeight.w600,
             ),

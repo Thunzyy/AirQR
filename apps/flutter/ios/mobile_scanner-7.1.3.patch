@@ -1,14 +1,54 @@
 --- a/MobileScannerPlugin.swift
 +++ b/MobileScannerPlugin.swift
-@@ -1,3 +1,4 @@
+@@ -1,4 +1,5 @@
  import AVFoundation
 +import CoreImage
  import Vision
  import VideoToolbox
-@@ -143 +143 @@
+ 
+@@ -91,6 +92,8 @@
+     
+     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+         switch call.method {
++        case "airqrAnalysisFps":
++            result(readAnalysisFps())
+         case "state":
+             checkPermission(call, result)
+         case "request":
+@@ -140,7 +143,28 @@
+     }
+     
+     var nextScanTime = 0.0
 -    var imagesCurrentlyBeingProcessed = false
 +    private let decodeSlot = DispatchSemaphore(value: 1)
-@@ -157,82 +157,33 @@
++    // Capture callbacks and method-channel reads run on different queues.
++    private let analysisRateLock = NSLock()
++    private var analysisFrames = 0
++    private var analysisWindowStart = ProcessInfo.processInfo.systemUptime
++
++    private func recordAnalysisFrame() {
++        analysisRateLock.lock()
++        analysisFrames += 1
++        analysisRateLock.unlock()
++    }
++
++    private func readAnalysisFps() -> Double {
++        let now = ProcessInfo.processInfo.systemUptime
++        analysisRateLock.lock()
++        defer { analysisRateLock.unlock() }
++        let elapsed = max(now - analysisWindowStart, 0.001)
++        let fps = Double(analysisFrames) / elapsed
++        analysisFrames = 0
++        analysisWindowStart = now
++        return fps
++    }
+     
+     // Gets called when a new image is added to the buffer
+     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+@@ -154,109 +178,103 @@
+         latestBuffer = imageBuffer
+         registry.textureFrameAvailable(textureId)
+         
 -        let currentTime = Date().timeIntervalSince1970
 -        let eligibleForScan = currentTime > nextScanTime && !imagesCurrentlyBeingProcessed
 -        if ((detectionSpeed == DetectionSpeed.normal || detectionSpeed == DetectionSpeed.noDuplicates) && eligibleForScan || detectionSpeed == DetectionSpeed.unrestricted) {
@@ -97,6 +137,7 @@
 +            return
 +        }
 +        nextScanTime = currentTime + timeoutSeconds
++        recordAnalysisFrame()
 +
 +        let session = captureSession
 +        let scanWindow = self.scanWindow
@@ -124,7 +165,7 @@
 +                    if VTCreateCGImageFromCVPixelBuffer(imageBuffer, options: nil, imageOut: &image) == kCVReturnSuccess,
 +                       let imageBytes = image?.jpegData(compressionQuality: 0.8) {
 +                        bytes = FlutterStandardTypedData(bytes: imageBytes)
-@@ -240,20 +191,62 @@
+                     }
 -
 -                    // Set the region of interest to match scanWindow
 -                    if let scanWindow = self.scanWindow {
@@ -207,7 +248,13 @@
 +    }
 +#endif
 +
-@@ -415,0 +409,9 @@
+     func checkPermission(_ call: FlutterMethodCall, _ result: @escaping FlutterResult) {
+         if #available(iOS 12.0, macOS 10.14, *) {
+             let status = AVCaptureDevice.authorizationStatus(for: .video)
+@@ -412,6 +430,15 @@
+                                 details: nil))
+             return
+         }
 +#if os(iOS)
 +        if detectionSpeed == .unrestricted,
 +           let selected = device,
@@ -217,13 +264,24 @@
 +        }
 +#endif
 +
-@@ -478,0 +481,5 @@
+ 
+         device.addObserver(self, forKeyPath: #keyPath(AVCaptureDevice.torchMode), options: .new, context: nil)
+ #if os(iOS)
+@@ -475,6 +502,11 @@
+                 connection.isVideoMirrored = true
+             }
+         }
 +#if os(iOS)
 +        if detectionSpeed == .unrestricted {
 +            configureHighFrameRate(device)
 +        }
 +#endif
-@@ -1042,1 +1050,24 @@
+ 
+         captureSession!.commitConfiguration()
+ 
+@@ -1040,6 +1072,29 @@
+ }
+ 
  extension VNBarcodeObservation {
 +    private func airqrBytePayload(_ descriptor: CIQRCodeDescriptor) -> Data? {
 +        let codewords = [UInt8](descriptor.errorCorrectedPayload)
@@ -248,7 +306,12 @@
 +        })
 +    }
 +
-@@ -1091,7 +1122,11 @@
+     private func distanceBetween(_ p1: CGPoint, _ p2: CGPoint) -> CGFloat {
+         return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2))
+     }
+@@ -1089,8 +1144,12 @@
+         let width = distanceBetween(adjustedTopLeft, adjustedTopRight) * CGFloat(imageWidth)
+         let height = distanceBetween(adjustedTopLeft, adjustedBottomLeft) * CGFloat(imageHeight)
          var rawBytes: FlutterStandardTypedData? = nil
 -        
 -        if #available(iOS 17.0, macOS 14.0, *) {
@@ -261,4 +324,3 @@
              if let payloadData = payloadData {
                  rawBytes = FlutterStandardTypedData(bytes: payloadData)
              }
-         }

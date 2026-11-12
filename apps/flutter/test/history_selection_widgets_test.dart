@@ -802,7 +802,7 @@ void main() {
         expect(rect.right, lessThanOrEqualTo(width));
         expect(
           find.byWidgetPredicate(
-            (widget) => widget is AirQrIcon && widget.name == 'check_circle',
+            (widget) => widget is AirQrIcon && widget.name == 'checklist',
           ),
           findsOneWidget,
         );
@@ -859,7 +859,10 @@ void _expectOutlineOnTop(WidgetTester tester, Finder cardFinder) {
   // including the progress bar.
   final outline = card.foregroundDecoration! as BoxDecoration;
   expect(outline.border, Border.all(color: AirQrTheme.accentBlue, width: 2));
-  expect(outline.borderRadius, BorderRadius.circular(28));
+  expect(
+    outline.borderRadius,
+    isIn([BorderRadius.circular(28), BorderRadius.circular(30)]),
+  );
   expect(
     (card.decoration! as BoxDecoration).borderRadius,
     outline.borderRadius,

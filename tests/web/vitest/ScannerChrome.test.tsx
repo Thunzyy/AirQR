@@ -817,9 +817,7 @@ describe("ScannerChrome", () => {
       />
     );
 
-    const sessionSummary = screen.getByTestId("scanner-session-state-summary");
-    expect(sessionSummary).toHaveTextContent("Threshold 8954 reached +28");
-    expect(sessionSummary).toHaveTextContent("Decode pending");
+    expect(screen.queryByTestId("scanner-session-state-summary")).not.toBeInTheDocument();
 
     expect(screen.getByTestId("scanner-session-progress")).toHaveTextContent(
       "Session 8982/9000"
@@ -831,6 +829,12 @@ describe("ScannerChrome", () => {
     expect(screen.queryByTestId("scanner-next-chunk-target")).not.toBeInTheDocument();
 
     fireEvent.click(missingToggle);
+    const sessionSummary = screen.getByTestId("scanner-session-state-summary");
+    expect(sessionSummary).toHaveTextContent("Threshold 8954 reached +28");
+    expect(sessionSummary).toHaveTextContent("Decode pending");
+    expect(screen.getByTestId("scanner-chunk-details")).toContainElement(sessionSummary);
+    expect(screen.getByTestId("scanner-bottom-overlay")).not.toContainElement(sessionSummary);
+
 
     const details = screen.getByTestId("scanner-chunk-details");
     expect(details).toHaveTextContent("Select chunk");

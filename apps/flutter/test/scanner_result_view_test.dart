@@ -341,8 +341,7 @@ void main() {
 
     expect(find.byKey(const Key('note_view')), findsOneWidget);
     expect(find.text('note.md'), findsOneWidget);
-    expect(find.text('# hello'), findsOneWidget);
-    expect(find.text('world'), findsOneWidget);
+    expect(find.text('# hello\nworld'), findsOneWidget);
     expect(find.byKey(const Key('scanner_note_copy_button')), findsOneWidget);
     expect(find.byKey(const Key('note_view_line_count')), findsOneWidget);
     expect(

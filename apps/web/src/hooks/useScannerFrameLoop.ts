@@ -70,14 +70,6 @@ export function useScannerFrameLoop({
     }
     lastScanAtRef.current = now;
 
-    fpsFrameCountRef.current += 1;
-    const fpsDelta = now - fpsLastTimeRef.current;
-    if (fpsDelta >= 1000) {
-      setFps(Math.round((fpsFrameCountRef.current * 1000) / fpsDelta));
-      fpsFrameCountRef.current = 0;
-      fpsLastTimeRef.current = now;
-    }
-
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const overlay = overlayRef.current;
@@ -85,6 +77,16 @@ export function useScannerFrameLoop({
 
     if (video.readyState !== video.HAVE_ENOUGH_DATA || !ctx) {
       return;
+    }
+    if (!useNativeDetector && !scanWorkerRef.current) return;
+
+    // Count actual analysis submissions, just like the native iOS pipeline.
+    fpsFrameCountRef.current += 1;
+    const fpsDelta = now - fpsLastTimeRef.current;
+    if (fpsDelta >= 1000) {
+      setFps(Math.round((fpsFrameCountRef.current * 1000) / fpsDelta));
+      fpsFrameCountRef.current = 0;
+      fpsLastTimeRef.current = now;
     }
 
     if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
@@ -108,7 +110,6 @@ export function useScannerFrameLoop({
       try {
         const barcodes = await barcodeDetectorRef.current.detect(video);
         if ((resetGenerationRef?.current ?? frameGeneration) !== frameGeneration) {
-          clearOverlay();
           return;
         }
 
@@ -143,7 +144,9 @@ export function useScannerFrameLoop({
       } catch (error) {
         logger.error("BarcodeDetector error", { error: error instanceof Error ? error.message : String(error) });
       } finally {
-        isProcessingFrameRef.current = false;
+        if ((resetGenerationRef?.current ?? frameGeneration) === frameGeneration) {
+          isProcessingFrameRef.current = false;
+        }
       }
       return;
     }

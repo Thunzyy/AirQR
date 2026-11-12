@@ -223,10 +223,8 @@ export function useScannerDecoderBootstrap({
             scanRequestIdRef.current > 0 &&
             message.requestId !== scanRequestIdRef.current
           ) {
-            if (overlay && ctx) {
-              ctx.clearRect(0, 0, overlay.width, overlay.height);
-            }
-            isProcessingFrameRef.current = false;
+            // A result from before reset must not unlock the new request or
+            // erase its overlay. Only the matching result owns that state.
             return;
           }
 

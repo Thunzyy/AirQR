@@ -82,13 +82,12 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   bool _searchOpen = false;
   HistorySortOption _sortBy = HistorySortOption.dateDesc;
   bool _syncEnabled = false;
+  bool _syncConnected = false;
   bool _isSyncingNow = false;
+  final Set<String> _syncingEntries = {};
   final TextEditingController _searchController = TextEditingController();
   Timer? _refreshTimer;
   static const _historySortPrefKey = 'airqr_history_sort';
-  static const _syncInterval = Duration(
-    seconds: 10,
-  ); // Don't sync more often than this
   late final HistoryPageRefreshController _refreshController;
   late final HistoryPageActions _actions =
       widget.actions ?? HistoryPageActions();
@@ -107,8 +106,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _refreshController =
-        widget.refreshController ??
-        HistoryPageRefreshController(syncInterval: _syncInterval);
+        widget.refreshController ?? HistoryPageRefreshController();
     WidgetsBinding.instance.addObserver(this);
     _appIsResumed =
         WidgetsBinding.instance.lifecycleState == null ||
@@ -248,8 +246,28 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
         _items = snapshot.items;
         _incompleteScans = snapshot.incompleteScans;
         _syncEnabled = snapshot.syncEnabled;
+        _syncConnected = snapshot.connected;
         _pruneSelection();
       });
+      final syncResult = snapshot.syncResult;
+      if (forceSync && syncResult != null) {
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              syncResult.success
+                  ? l10n.settings_syncSuccess(
+                      syncResult.uploadedCount,
+                      syncResult.downloadedCount,
+                    )
+                  : l10n.history_syncFailed(syncResult.error ?? 'Sync failed'),
+            ),
+            backgroundColor: syncResult.success
+                ? AirQrTheme.success
+                : AirQrTheme.destructive,
+          ),
+        );
+      }
     } finally {
       _refreshInFlight = false;
       final queuedCompleter = _queuedRefreshCompleter;
@@ -546,7 +564,9 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   }
 
   Future<void> _bulkSync() async {
-    final targets = _selectedItems.where((item) => item.isLocalOnly).toList();
+    final targets = _selectedItems
+        .where((item) => !item.isSynced || item.isLocalOnly)
+        .toList();
     if (targets.isEmpty) return;
     _exitSelectionMode();
 
@@ -554,7 +574,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     HistorySyncItemResult? firstProblem;
     for (final item in targets) {
       final result = await _actions.syncItem(item);
-      if (result.status == HistorySyncItemStatus.queued) {
+      if (result.status == HistorySyncItemStatus.synced) {
         queued++;
       } else {
         firstProblem ??= result;
@@ -773,16 +793,24 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   }
 
   Future<void> _syncItem(HistoryItem item) async {
-    final result = await _actions.syncItem(item);
-    await _showSyncItemResult(result);
-    await _refresh();
+    final key = 'file:${item.path}';
+    if (!_syncingEntries.add(key)) return;
+    setState(() {});
+    try {
+      final result = await _actions.syncItem(item);
+      await _showSyncItemResult(result);
+      await _refresh();
+    } finally {
+      _syncingEntries.remove(key);
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _showSyncItemResult(HistorySyncItemResult result) async {
     if (!mounted) return;
 
     switch (result.status) {
-      case HistorySyncItemStatus.queued:
+      case HistorySyncItemStatus.synced:
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -827,9 +855,17 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   }
 
   Future<void> _syncIncompleteScan(IncompleteScan scan) async {
-    final result = await _actions.syncIncompleteScan(scan);
-    await _showSyncItemResult(result);
-    await _refresh();
+    final key = 'scan:${scan.id}';
+    if (!_syncingEntries.add(key)) return;
+    setState(() {});
+    try {
+      final result = await _actions.syncIncompleteScan(scan);
+      await _showSyncItemResult(result);
+      await _refresh();
+    } finally {
+      _syncingEntries.remove(key);
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _keepLocalIncompleteScan(IncompleteScan scan) async {
@@ -1195,7 +1231,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
             tooltip: l10n.common_copy,
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: content));
-              if (!mounted) return;
+              if (!context.mounted) return;
               ScaffoldMessenger.of(
                 context,
               ).showSnackBar(SnackBar(content: Text(l10n.scanner_noteCopied)));
@@ -1284,7 +1320,11 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
       downloadTooltip: l10n.common_download,
       onDownload: selectedItems.isNotEmpty ? _bulkDownload : null,
       syncTooltip: l10n.history_syncToServer,
-      onSync: selectedItems.any((item) => item.isLocalOnly) ? _bulkSync : null,
+      onSync:
+          _syncEnabled &&
+              selectedItems.any((item) => !item.isSynced || item.isLocalOnly)
+          ? _bulkSync
+          : null,
       keepLocalTooltip: l10n.history_keepLocal,
       onKeepLocal:
           selectedItems.any((item) => item.isSynced && !item.isLocalOnly)
@@ -1310,7 +1350,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
                   searchOpen: _searchOpen,
                   searchQuery: _searchQuery,
                   searchHint: l10n.history_searchFiles,
-                  connected: _syncEnabled,
+                  connected: _syncConnected,
                   connectedLabel: l10n.history_connected,
                   refreshTooltip: l10n.history_refresh,
                   clearSearchTooltip: l10n.history_clearSearch,
@@ -1409,6 +1449,9 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
                                 syncLabel: l10n.history_syncToServer,
                                 resumeLabel: l10n.history_resumeScan,
                                 deleteLabel: l10n.history_deleteIncomplete,
+                                isSyncing: _syncingEntries.contains(
+                                  'scan:${scan.id}',
+                                ),
                                 onSync: _syncEnabled && !scan.isRemote
                                     ? () => _syncIncompleteScan(scan)
                                     : null,
@@ -1445,7 +1488,13 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
                                 onKeepLocal: item.isSynced
                                     ? () => _keepLocalOnDemand(item)
                                     : null,
-                                onSync: item.isLocalOnly
+                                isSyncing: _syncingEntries.contains(
+                                  'file:${item.path}',
+                                ),
+                                syncAvailable: _syncEnabled,
+                                onSync:
+                                    (!item.isSynced || item.isLocalOnly) &&
+                                        _syncEnabled
                                     ? () => _syncItem(item)
                                     : null,
                                 onSave: () => _saveHistoryItemOnDemand(item),

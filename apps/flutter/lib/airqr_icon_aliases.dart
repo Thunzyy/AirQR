@@ -7,6 +7,7 @@ const Map<String, String> airQrLucideIconAliases = <String, String>{
   "add": "plus",
   "remove": "minus",
   "check": "check",
+  "checklist": "list-checks",
   "sort": "arrow-down-up",
   "arrow_upward": "arrow-up",
   "arrow_downward": "arrow-down",

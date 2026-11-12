@@ -187,6 +187,38 @@ describe('scanWebSocketSyncService', () => {
     vi.restoreAllMocks();
   });
 
+  it('confirms a manual packet sync only after every ACK and permits retry after timeout', async () => {
+    const { getScanWebSocketSyncService } = await import('@web/services/scanWebSocketSyncService');
+    const service = getScanWebSocketSyncService();
+    const config = { enabled: true, url: 'https://sync.example.com', apiKey: 'test-key', username: '', password: '', syncScanned: true, syncGenerated: true, autoSyncHistory: true };
+    for (let packetIndex = 0; packetIndex < 2; packetIndex++) {
+      service.queuePacket(new Uint8Array([1, packetIndex, 3]), { sessionId: 'manual', isStreaming: true, packetIndex }, config);
+    }
+    const socket = MockWebSocket.getLastInstance()!;
+    triggerReadyScanSocket(socket);
+    await vi.advanceTimersByTimeAsync(0);
+    const confirmed = vi.fn();
+    const firstAttempt = service.waitForPacketsAcknowledged('manual', 100).then(confirmed);
+    const timedOut = expect(firstAttempt).rejects.toThrow('did not acknowledge');
+    await acknowledgeBinaryFrames(socket, 1);
+    expect(confirmed).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(101);
+    await timedOut;
+    const retry = service.waitForPacketsAcknowledged('manual', 100).then(confirmed);
+    await acknowledgeBinaryFrames(socket, 1, { startFrameIndex: 1, receivedCountStart: 1 });
+    await retry;
+    expect(confirmed).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects pending manual synchronization when the transport is discarded', async () => {
+    const { getScanWebSocketSyncService } = await import('@web/services/scanWebSocketSyncService');
+    const service = getScanWebSocketSyncService();
+    service.queuePacket(new Uint8Array([1]), { sessionId: 'discarded', isStreaming: true, packetIndex: 0 }, { enabled: true, url: 'https://sync.example.com', apiKey: 'test-key', syncScanned: true });
+    const pending = expect(service.waitForPacketsAcknowledged('discarded')).rejects.toThrow('interrupted');
+    service.discardSession('discarded');
+    await pending;
+  });
+
   it('replays buffered packets through resume checkpoints before sending complete', async () => {
     const { getScanWebSocketSyncService } = await import('@web/services/scanWebSocketSyncService');
     const service = getScanWebSocketSyncService();

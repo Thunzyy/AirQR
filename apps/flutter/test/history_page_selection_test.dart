@@ -268,7 +268,8 @@ void main() {
       tester,
     ) async {
       final actions = _FakeActions();
-      await tester.pumpWidget(_app(_threeItemsAndScan(), actions: actions));
+      final controller = _threeItemsAndScan()..syncEnabled = true;
+      await tester.pumpWidget(_app(controller, actions: actions));
       await tester.pumpAndSettle();
 
       await tester.longPress(find.text('zeta.gif'));
@@ -284,7 +285,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(actions.syncedPaths, <String>['bravo.bin']);
       expect(find.byType(HistorySelectionBar), findsNothing);
-      expect(find.text('1 item queued for sync'), findsOneWidget);
+      expect(find.text('1 item synced'), findsOneWidget);
     });
 
     testWidgets('keep local runs only for synced items', (tester) async {
@@ -442,6 +443,7 @@ IncompleteScan _scan(String id, {String? filename}) => IncompleteScan(
 class _MutableRefreshController extends HistoryPageRefreshController {
   List<HistoryItem> items;
   List<IncompleteScan> scans;
+  bool syncEnabled = false;
 
   _MutableRefreshController({required this.items, required this.scans});
 
@@ -450,7 +452,7 @@ class _MutableRefreshController extends HistoryPageRefreshController {
       HistoryPageSnapshot(
         items: List<HistoryItem>.of(items),
         incompleteScans: List<IncompleteScan>.of(scans),
-        syncEnabled: false,
+        syncEnabled: syncEnabled,
       );
 }
 
@@ -485,7 +487,7 @@ class _FakeActions extends HistoryPageActions {
   @override
   Future<HistorySyncItemResult> syncItem(HistoryItem item) async {
     syncedPaths.add(item.path);
-    return HistorySyncItemResult.queued(p.basename(item.path));
+    return HistorySyncItemResult.synced(p.basename(item.path));
   }
 
   @override

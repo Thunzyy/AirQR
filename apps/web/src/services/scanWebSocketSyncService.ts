@@ -397,6 +397,7 @@ class ScanSessionTransport {
   private readonly queuedPacketKeys = new Set<string>();
   private readonly inFlightPacketKeys = new Set<string>();
   private readonly outboxWritePendingPacketKeys = new Set<string>();
+  private readonly packetAckObservers = new Set<() => void>();
   private sendQueue: string[] = [];
   private pendingComplete: PendingComplete | null = null;
   private metadata: SessionMetadata = {};
@@ -632,6 +633,29 @@ class ScanSessionTransport {
 
   hasSessionData(): boolean {
     return this.packetStore.size > 0 || this.serverReceivedCount > 0;
+  }
+
+  waitForPacketsAcknowledged(timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const finish = (error?: Error) => {
+        clearTimeout(timeout);
+        this.packetAckObservers.delete(check);
+        if (error) reject(error);
+        else resolve();
+      };
+      const check = () => {
+        if (this.manualClose) {
+          finish(new Error('Scan synchronization was interrupted'));
+        } else if (this.packetStore.size === 0 &&
+                   this.outboxWritePendingPacketKeys.size === 0 &&
+                   this.serverReceivedCount > 0) {
+          finish();
+        }
+      };
+      const timeout = setTimeout(() => finish(new Error('Server did not acknowledge scan packets in time')), timeoutMs);
+      this.packetAckObservers.add(check);
+      check();
+    });
   }
 
   nudgeReconnect(): void {
@@ -879,6 +903,7 @@ class ScanSessionTransport {
     this.debugSnapshot.windowSize = this.windowSize;
     appendDebugEvent(this.debugSnapshot, type, details);
     publishDebugSnapshot(this.debugSnapshot);
+    this.packetAckObservers.forEach((check) => check());
   }
 
   private updateMetadataFromPacket(meta: ScanUploadPacketMeta, packetSize: number): void {
@@ -1901,6 +1926,13 @@ export class ScanWebSocketSyncService {
     }
     transport.disconnect();
     this.sessions.delete(sessionId);
+  }
+
+  waitForPacketsAcknowledged(sessionId: string, timeoutMs = 120_000): Promise<void> {
+    const transport = this.sessions.get(sessionId);
+    return transport
+      ? transport.waitForPacketsAcknowledged(timeoutMs)
+      : Promise.reject(new Error('Scan packet transport is unavailable'));
   }
 
   disconnectAll(): void {

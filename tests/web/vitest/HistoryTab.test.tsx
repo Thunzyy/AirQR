@@ -38,6 +38,7 @@ const {
   queueHistoryItemMock,
   queueScanCompleteMock,
   queueScanPacketMock,
+  waitForPacketAckMock,
   replaceScanSessionPacketPagesMock,
   replaceScanSessionPacketsMock,
   saveHistoryItemMock,
@@ -76,6 +77,7 @@ const {
   queueHistoryItemMock: vi.fn(),
   queueScanCompleteMock: vi.fn(),
   queueScanPacketMock: vi.fn(),
+  waitForPacketAckMock: vi.fn().mockResolvedValue(undefined),
   replaceScanSessionPacketPagesMock: vi.fn(),
   replaceScanSessionPacketsMock: vi.fn(),
   saveHistoryItemMock: vi.fn(),
@@ -91,6 +93,10 @@ vi.mock("@web/features/history/History", () => ({
     historyPropsMock(props);
     return <div data-testid="history-tab-stub" />;
   },
+}));
+
+vi.mock('@web/services/scanWebSocketSyncService', () => ({
+  getScanWebSocketSyncService: () => ({ waitForPacketsAcknowledged: waitForPacketAckMock }),
 }));
 
 // The global Worker stub never answers, so zip on the main thread instead,
@@ -269,6 +275,8 @@ describe("HistoryTab", () => {
             fileData?: Uint8Array;
           }) => Promise<void>;
           syncStatusLabel?: string;
+          pendingSyncItemIds?: ReadonlySet<string>;
+          isSyncing?: boolean;
         }
       | undefined;
 
@@ -2507,6 +2515,23 @@ describe("HistoryTab", () => {
     });
 
     expect(queueHistoryItemMock).toHaveBeenCalledTimes(1);
+    expect(getHistoryProps()?.pendingSyncItemIds?.has('generated-1')).toBe(true);
+    const queued = queueHistoryItemMock.mock.calls[0];
+    await act(async () => {
+      await getHistoryProps()?.onSyncItem?.({ id: 'generated-1', origin: 'generated', title: 'output.gif', subtitle: 'local file', date: '2026-03-29T10:00:00.000Z', type: 'file', mimeType: 'image/gif' });
+    });
+    expect(queueHistoryItemMock).toHaveBeenCalledTimes(1);
+    expect(markHistoryItemAsSyncedMock).not.toHaveBeenCalled();
+    await act(async () => { await queued[4]('temporary failure'); });
+    expect(getHistoryProps()?.pendingSyncItemIds?.has('generated-1')).toBe(false);
+    expect(markHistoryItemAsSyncedMock).not.toHaveBeenCalled();
+    await act(async () => {
+      await getHistoryProps()?.onSyncItem?.({ id: 'generated-1', origin: 'generated', title: 'output.gif', subtitle: 'local file', date: '2026-03-29T10:00:00.000Z', type: 'file', mimeType: 'image/gif' });
+    });
+    expect(queueHistoryItemMock).toHaveBeenCalledTimes(2);
+    await act(async () => { await queueHistoryItemMock.mock.calls[1][3](); });
+    expect(markHistoryItemAsSyncedMock).toHaveBeenCalledWith('generated-1', 'generated-1');
+    expect(getHistoryProps()?.pendingSyncItemIds?.has('generated-1')).toBe(false);
   });
 
   it("queues eligible local history items during manual sync and skips the rest", async () => {
@@ -2618,6 +2643,17 @@ describe("HistoryTab", () => {
         filename: "archive.bin",
       })
     );
+    expect(getHistoryProps()?.pendingSyncItemIds?.size).toBe(2);
+    await act(async () => {
+      await Promise.all([
+        queueHistoryItemMock.mock.calls[0][3](),
+        queueScanCompleteMock.mock.calls[0][3](),
+      ]);
+    });
+    const acknowledged = useHistoryStore.getState().items;
+    expect(acknowledged.find((item) => item.id === 'generated-1')?.isSynced).toBe(true);
+    expect(acknowledged.find((item) => item.id === 'scanned-1')?.isSynced).toBe(true);
+    expect(getHistoryProps()?.pendingSyncItemIds?.size).toBe(0);
   });
 
   it("clears local and remote history after confirmation", async () => {

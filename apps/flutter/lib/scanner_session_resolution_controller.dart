@@ -34,14 +34,16 @@ class ScannerSessionResolutionController {
     ScannerRemoveIncompleteScanCallback? removeIncompleteScan,
   }) : _getHistory = getHistory ?? HistoryService.getHistory,
        _fetchSessionInfo = fetchSessionInfo ?? SyncService.fetchSessionInfo,
-       _removeIncompleteScan = removeIncompleteScan ?? IncompleteScanService.remove;
+       _removeIncompleteScan =
+           removeIncompleteScan ?? IncompleteScanService.remove;
 
   Future<ScannerSessionResolutionResult> resolve({
     required String? qrSessionId,
     required bool isExplicitResume,
+    bool allowCompletedSession = false,
     required Set<String> ignoredCompletedSessionIds,
   }) async {
-    if (qrSessionId == null || isExplicitResume) {
+    if (qrSessionId == null || isExplicitResume || allowCompletedSession) {
       return ScannerSessionResolutionResult(
         sessionId: qrSessionId,
         lockToCurrent: false,

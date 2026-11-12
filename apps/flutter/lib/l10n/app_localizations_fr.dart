@@ -477,7 +477,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get decoder_notAirQrGif =>
-      'Ce GIF n’est pas un transfert AirQR. Encodez d’abord un fichier dans l’onglet Encoder, puis décodez ce GIF — ou essayez l’exemple ci-dessous.';
+      'Ce GIF n’est pas un transfert AirQR. Encodez d’abord un fichier dans l’onglet Encoder, puis décodez ce GIF.';
 
   @override
   String get decoder_notAirQrStatus =>
@@ -494,19 +494,6 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get decoder_airQrOnlyHint =>
       'Le décodage ne fonctionne qu’avec les GIF créés par AirQR, pas avec un GIF photo classique.';
-
-  @override
-  String get decoder_trySample => 'Essayer un GIF d’exemple';
-
-  @override
-  String get decoder_sampleFilename => 'airqr-sample.txt';
-
-  @override
-  String get decoder_sampleNote =>
-      'Bonjour de AirQR.\nCette note a été récupérée depuis un GIF QR animé.';
-
-  @override
-  String get decoder_sampleFailed => 'Impossible de générer le GIF d’exemple.';
 
   @override
   String get decoder_noGifInZip =>
@@ -931,7 +918,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String history_syncQueued(String filename) {
-    return '\"$filename\" en file d\'attente pour la synchronisation';
+    return '\"$filename\" synchronisé';
   }
 
   @override
@@ -1717,8 +1704,8 @@ class AppLocalizationsFr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count éléments en attente de synchronisation',
-      one: '$count élément en attente de synchronisation',
+      other: '$count éléments synchronisés',
+      one: '$count élément synchronisé',
     );
     return '$_temp0';
   }

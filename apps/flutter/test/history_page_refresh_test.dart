@@ -752,9 +752,13 @@ void main() {
 
       var syncCalls = 0;
       final controller = HistoryPageRefreshController(
+        fetchServerHistory: () async => const ServerHistorySnapshot([]),
+        loadIncompleteScans: () async => [],
         syncAll: () async {
           syncCalls++;
-          return SyncResult.ok();
+          return syncCalls == 1
+              ? SyncResult.error('HTTP 503')
+              : SyncResult.ok(uploaded: 1);
         },
       );
 
@@ -762,8 +766,14 @@ void main() {
       expect(normalSnapshot.syncEnabled, isTrue);
       expect(syncCalls, 0);
 
-      await controller.refresh(forceSync: true);
+      final failed = await controller.refresh(forceSync: true);
       expect(syncCalls, 1);
+      expect(failed.syncResult!.success, isFalse);
+      final retry = await controller.refresh(forceSync: true);
+      expect(syncCalls, 2);
+      expect(retry.syncResult!.success, isTrue);
+      expect(retry.syncResult!.uploadedCount, 1);
+      expect(retry.connected, isTrue);
     });
   });
 }

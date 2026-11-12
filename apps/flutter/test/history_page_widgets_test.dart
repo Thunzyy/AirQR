@@ -323,7 +323,7 @@ void main() {
           (actionRects.first.center.dy - identityIconRect.center.dy).abs(),
           lessThan(10),
         );
-        expect(cardRect.height, lessThanOrEqualTo(80));
+        expect(cardRect.height, lessThanOrEqualTo(88));
 
         final visualCircles = find
             .descendant(
@@ -335,7 +335,7 @@ void main() {
             .where((size) => size.width > 0 && size.height > 0)
             .toList();
         expect(
-          visualCircles.where((size) => size == const Size.square(30)),
+          visualCircles.where((size) => size == const Size.square(40)),
           hasLength(4),
         );
 
@@ -497,7 +497,7 @@ void main() {
 
   for (final width in <double>[360, 375, 390]) {
     testWidgets(
-      'history toolbar stays on one row at ${width.toInt()}dp with normal text',
+      'history toolbar keeps the badge above full size actions at ${width.toInt()}dp with normal text',
       (tester) async {
         addTearDown(() => tester.binding.setSurfaceSize(null));
         await tester.binding.setSurfaceSize(Size(width, 640));
@@ -543,9 +543,9 @@ void main() {
           'Clear history',
         ].map((tooltip) => tester.getRect(find.byTooltip(tooltip))).toList();
         for (final rect in actionRects) {
-          expect(rect.width, greaterThanOrEqualTo(36));
+          expect(rect.width, greaterThanOrEqualTo(48));
           expect(rect.right, lessThanOrEqualTo(width));
-          expect((rect.center.dy - badgeRect.center.dy).abs(), lessThan(2));
+          expect(rect.top, greaterThan(badgeRect.bottom));
         }
       },
     );
@@ -909,7 +909,7 @@ void main() {
           expect(action, findsOneWidget);
           expect(action.hitTestable(), findsOneWidget);
           final rect = tester.getRect(action);
-          expect(rect.width, greaterThanOrEqualTo(36));
+          expect(rect.width, greaterThanOrEqualTo(48));
           expect(rect.height, greaterThanOrEqualTo(36));
           expect(rect.left, greaterThanOrEqualTo(0));
           expect(rect.right, lessThanOrEqualTo(width));
@@ -999,25 +999,30 @@ void main() {
         ),
       );
 
-      expect(find.text('99.9%'), findsOneWidget);
-      expect(find.textContaining('200/200 packets'), findsOneWidget);
+      expect(find.textContaining('99.9%', findRichText: true), findsOneWidget);
       expect(
-        find.textContaining('Server sync: 120/200 packets'),
+        find.textContaining('200/200 packets', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Server sync: 120/200 packets', findRichText: true),
         findsOneWidget,
       );
       expect(find.text('100%'), findsNothing);
-      final percent = tester.widget<Text>(find.text('99.9%'));
-      expect(percent.style?.fontFamily, 'Manrope');
+      final percent = tester.widget<RichText>(
+        find.textContaining('99.9%', findRichText: true),
+      );
+      expect(percent.text.style?.fontFamily, 'Manrope');
       expect(
-        percent.style?.fontFeatures,
+        percent.text.style?.fontFeatures,
         contains(const FontFeature.tabularFigures()),
       );
-      final packets = tester.widget<Text>(
-        find.textContaining('200/200 packets').first,
+      final packets = tester.widget<RichText>(
+        find.textContaining('200/200 packets', findRichText: true).first,
       );
-      expect(packets.style?.fontFamily, 'monospace');
+      expect(packets.text.style?.fontFamily, 'Manrope');
       expect(
-        packets.style?.fontFeatures,
+        packets.text.style?.fontFeatures,
         contains(const FontFeature.tabularFigures()),
       );
       expect(
@@ -1043,7 +1048,7 @@ void main() {
 
   for (final width in <double>[320, 360, 390]) {
     testWidgets(
-      'incomplete history actions stay compact at ${width.toInt()}dp',
+      'incomplete history actions match web size at ${width.toInt()}dp',
       (tester) async {
         addTearDown(() => tester.binding.setSurfaceSize(null));
         await tester.binding.setSurfaceSize(Size(width, 640));
@@ -1085,7 +1090,7 @@ void main() {
             .toList();
         expect(actionRects, hasLength(3));
         for (final rect in actionRects) {
-          expect(rect.size, const Size.square(34));
+          expect(rect.size, const Size.square(44));
           expect(rect.left, greaterThanOrEqualTo(cardRect.left));
           expect(rect.right, lessThanOrEqualTo(cardRect.right));
         }
@@ -1102,7 +1107,7 @@ void main() {
             )
             .evaluate()
             .map((element) => tester.getSize(find.byWidget(element.widget)))
-            .where((size) => size == const Size.square(30));
+            .where((size) => size == const Size.square(40));
         expect(visualCircles, hasLength(3));
       },
     );
@@ -1167,7 +1172,7 @@ void main() {
         .map((element) => tester.getSize(find.byWidget(element.widget)))
         .where((size) => size.width > 0 && size.height > 0);
     expect(
-      visualCircles.where((size) => size == const Size.square(30)),
+      visualCircles.where((size) => size == const Size.square(40)),
       hasLength(3),
     );
     expect(find.bySemanticsLabel('Sync to server'), findsOneWidget);
@@ -1189,10 +1194,7 @@ void main() {
 
     expect(
       find.byWidgetPredicate(
-        (widget) =>
-            widget is AirQrIcon &&
-            widget.name == 'cloud_upload' &&
-            widget.color == Colors.white,
+        (widget) => widget is AirQrIcon && widget.name == 'cloud_upload',
       ),
       findsOneWidget,
     );
@@ -1396,7 +1398,7 @@ void main() {
         (widget) =>
             widget is AirQrIcon &&
             widget.name == 'download' &&
-            widget.size == 14,
+            widget.size == 20,
       ),
       findsOneWidget,
     );

@@ -50,7 +50,6 @@ class EncoderNetworkAccessNotice extends StatelessWidget {
   final VoidCallback? onOpenOfflineWebSettings;
   final VoidCallback onOpenGithubReleases;
   final VoidCallback onDismiss;
-
   const EncoderNetworkAccessNotice({
     super.key,
     required this.onOpenOfflineWebSettings,
@@ -62,153 +61,97 @@ class EncoderNetworkAccessNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final primaryText = AirQrTheme.textPrimary(context);
-    final secondaryText = AirQrTheme.textSecondary(context);
-
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AirQrTheme.card(context),
         borderRadius: BorderRadius.circular(28),
+        boxShadow: AirQrTheme.softShadow(context),
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 54),
-            child: LayoutBuilder(
-              key: const Key('encoder-network-notice-content'),
-              builder: (context, constraints) {
-                final compact = constraints.maxWidth < 560;
-                final icon = Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AirQrTheme.controlSurface(context),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: AirQrIcon(
-                    'wifi_tethering',
-                    size: 22,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.encoder_networkTitle,
+                  key: const Key('encoder-network-notice-content'),
+                  style: TextStyle(
                     color: primaryText,
-                    semanticLabel: l10n.encoder_networkTitle,
-                  ),
-                );
-                final textAndActionsChild = Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.encoder_networkTitle,
-                      style: TextStyle(
-                        color: primaryText,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      l10n.encoder_networkBody,
-                      style: TextStyle(color: secondaryText, height: 1.35),
-                    ),
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: onOpenOfflineWebSettings,
-                          icon: const AirQrIcon('settings', size: 17),
-                          label: Text(l10n.encoder_openOfflineWebSettings),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AirQrTheme.primaryButtonSurface(
-                              context,
-                            ),
-                            foregroundColor: AirQrTheme.primaryButtonForeground(
-                              context,
-                            ),
-                            disabledBackgroundColor: AirQrTheme.controlSurface(
-                              context,
-                            ),
-                            disabledForegroundColor: secondaryText,
-                            elevation: 0,
-                            minimumSize: const Size(48, 48),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: onOpenGithubReleases,
-                          icon: AirQrIcon(
-                            'open_in_new',
-                            size: 17,
-                            color: primaryText,
-                          ),
-                          label: Text(l10n.encoder_openGithubReleases),
-                          style: TextButton.styleFrom(
-                            backgroundColor: AirQrTheme.actionSurface(context),
-                            foregroundColor: primaryText,
-                            minimumSize: const Size(48, 48),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                );
-                final textAndActions = Expanded(child: textAndActionsChild);
-
-                if (compact) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      icon,
-                      const SizedBox(height: 12),
-                      textAndActionsChild,
-                    ],
-                  );
-                }
-
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [icon, const SizedBox(width: 14), textAndActions],
-                );
-              },
-            ),
-          ),
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Tooltip(
-              message: l10n.encoder_hideNetworkNotice,
-              child: Semantics(
-                button: true,
-                label: l10n.encoder_hideNetworkNotice,
-                child: Material(
-                  color: AirQrTheme.actionSurface(context),
-                  borderRadius: BorderRadius.circular(999),
-                  child: InkWell(
-                    onTap: onDismiss,
-                    borderRadius: BorderRadius.circular(999),
-                    child: SizedBox(
-                      key: const Key('encoder-network-notice-dismiss'),
-                      width: 48,
-                      height: 48,
-                      child: Center(
-                        child: AirQrIcon('close', size: 18, color: primaryText),
-                      ),
-                    ),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    height: 1.4,
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              IconButton(
+                key: const Key('encoder-network-notice-dismiss'),
+                tooltip: l10n.encoder_hideNetworkNotice,
+                onPressed: onDismiss,
+                constraints: const BoxConstraints.tightFor(
+                  width: 48,
+                  height: 48,
+                ),
+                icon: const AirQrIcon('close', size: 18),
+                style: IconButton.styleFrom(
+                  backgroundColor: AirQrTheme.actionSurface(context),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l10n.encoder_networkBody,
+            style: TextStyle(
+              color: AirQrTheme.textSecondary(context),
+              fontSize: 14,
+              height: 1.45,
             ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedButton.icon(
+                onPressed: onOpenOfflineWebSettings,
+                icon: const AirQrIcon('settings', size: 16),
+                label: Text(l10n.encoder_openOfflineWebSettings),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AirQrTheme.primaryButtonSurface(context),
+                  foregroundColor: AirQrTheme.primaryButtonForeground(context),
+                  elevation: 0,
+                  minimumSize: const Size(48, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  textStyle: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  shape: const StadiumBorder(),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: onOpenGithubReleases,
+                icon: const AirQrIcon('open_in_new', size: 16),
+                label: Text(l10n.encoder_openGithubReleases),
+                style: TextButton.styleFrom(
+                  backgroundColor: AirQrTheme.actionSurface(context),
+                  foregroundColor: primaryText,
+                  minimumSize: const Size(48, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  textStyle: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  shape: const StadiumBorder(),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -302,38 +245,45 @@ class EncoderNoteEditor extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                DropdownButtonHideUnderline(
-                  child: DropdownButton<NoteFormat>(
-                    key: const Key('encoder_note_format_dropdown'),
-                    value: noteFormat,
-                    isDense: true,
-                    borderRadius: BorderRadius.circular(16),
-                    dropdownColor: AirQrTheme.controlSurface(context),
-                    icon: AirQrIcon(
-                      'expand_more',
-                      size: 16,
-                      color: AirQrTheme.textPrimary(context),
+                Expanded(
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<NoteFormat>(
+                      key: const Key('encoder_note_format_dropdown'),
+                      value: noteFormat,
+                      isDense: true,
+                      isExpanded: true,
+                      borderRadius: BorderRadius.circular(16),
+                      dropdownColor: AirQrTheme.controlSurface(context),
+                      icon: AirQrIcon(
+                        'expand_more',
+                        size: 16,
+                        color: AirQrTheme.textPrimary(context),
+                      ),
+                      iconSize: 16,
+                      style: TextStyle(
+                        color: AirQrTheme.textPrimary(context),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      items: noteFormatOptions.map((option) {
+                        return DropdownMenuItem<NoteFormat>(
+                          value: option.value,
+                          child: Text(
+                            _noteFormatLabel(l10n, option.value),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          onNoteFormatChanged(value);
+                        }
+                      },
                     ),
-                    iconSize: 16,
-                    style: TextStyle(
-                      color: AirQrTheme.textPrimary(context),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    items: noteFormatOptions.map((option) {
-                      return DropdownMenuItem<NoteFormat>(
-                        value: option.value,
-                        child: Text(_noteFormatLabel(l10n, option.value)),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        onNoteFormatChanged(value);
-                      }
-                    },
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 TextButton.icon(
                   key: const Key('encoder_note_clear_button'),
                   onPressed: noteText.isEmpty ? null : onClear,
@@ -451,7 +401,9 @@ class EncoderNoteEditor extends StatelessWidget {
                 top: BorderSide(color: AirQrTheme.divider(context)),
               ),
             ),
-            child: Row(
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
               children: [
                 Text(
                   l10n.common_lineCount(noteLines.length),
@@ -479,7 +431,7 @@ class EncoderNoteEditor extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                const Spacer(),
+
                 Text(
                   l10n.common_byteCount(noteBytes),
                   style: TextStyle(
@@ -532,10 +484,11 @@ class EncoderSourceCard extends StatelessWidget {
     );
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AirQrTheme.card(context),
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(34),
+        boxShadow: AirQrTheme.softShadow(context),
       ),
       child: Column(
         children: [
@@ -604,7 +557,10 @@ class EncoderSourceCard extends StatelessWidget {
             Text(
               subtitle ?? '',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AirQrTheme.textMuted(context)),
+              style: TextStyle(
+                color: AirQrTheme.textMuted(context),
+                fontSize: 14,
+              ),
             ),
           ],
         ],
@@ -637,7 +593,7 @@ class _EncoderSourceAction extends StatelessWidget {
         splashColor: Colors.transparent,
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [

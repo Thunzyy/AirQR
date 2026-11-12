@@ -1144,7 +1144,7 @@ describe('Scanner camera lifecycle', () => {
     });
   });
 
-  it('resets in one click without restarting the same visible session', async () => {
+  it('resets in one click and accepts newly captured frames from the same session', async () => {
     const packet = new Uint8Array(35);
     packet[0] = 2;
     packet.set([0, 0, 0, 123], 1);
@@ -1206,10 +1206,10 @@ describe('Scanner camera lifecycle', () => {
       });
     });
 
-    expect(decodeStreamingPacketMock).toHaveBeenCalledTimes(1);
+    expect(decodeStreamingPacketMock).toHaveBeenCalledTimes(2);
     await waitFor(() => {
-      expect(screen.getByTestId('scanner-stat-scanned')).toHaveTextContent('0');
-      expect(screen.getByTestId('scanner-stat-min')).toHaveTextContent('0');
+      expect(screen.getByTestId('scanner-stat-scanned')).toHaveTextContent('1');
+      expect(screen.getByTestId('scanner-stat-min')).toHaveTextContent('1');
     });
   });
 

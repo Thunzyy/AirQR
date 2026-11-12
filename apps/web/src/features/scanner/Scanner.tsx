@@ -490,13 +490,7 @@ const Scanner: React.FC<ScannerProps> = ({
     const packetSessionId = isStreaming
       ? extractSessionIdFromPacket(binaryData)
       : undefined;
-    if (
-      packetSessionId &&
-      suppressResetSessionRealtimeRef.current &&
-      ignoredSessionAfterResetRef.current === packetSessionId
-    ) {
-      return;
-    }
+
 
     // Store this packet for potential resume
     const packetStartIndex = packetIndexRef.current;
@@ -555,22 +549,13 @@ const Scanner: React.FC<ScannerProps> = ({
         result.sessionId ??
         packetSessionId ??
         extractSessionIdFromPacket(binaryData);
-      if (
-        resultSessionId &&
-        suppressResetSessionRealtimeRef.current &&
-        ignoredSessionAfterResetRef.current === resultSessionId
-      ) {
-        return;
-      }
+
       const resolvedSessionId = getOrCreateSessionId(resultSessionId);
       if (result.type !== "error") {
-        if (
-          !resultSessionId ||
-          ignoredSessionAfterResetRef.current !== resultSessionId
-        ) {
-          ignoredSessionAfterResetRef.current = null;
-          suppressResetSessionRealtimeRef.current = false;
-        }
+        // A newly decoded camera packet is an explicit rescan, including the
+        // same stream. Realtime events alone remain suppressed after reset.
+        ignoredSessionAfterResetRef.current = null;
+        suppressResetSessionRealtimeRef.current = false;
       }
       const normalizedFilename = normalizeScanFilename(result.filename);
       if (normalizedFilename) {

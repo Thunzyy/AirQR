@@ -369,7 +369,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('SettingsCard renders its semantic one-dp outline', (
+  testWidgets('SettingsCard uses the same rounded elevated surface as web', (
     tester,
   ) async {
     const borderColor = Color(0xFF456789);
@@ -392,8 +392,9 @@ void main() {
       ),
     );
     final decoration = container.decoration! as BoxDecoration;
-    expect(decoration.borderRadius, AirQrRadii.card);
-    expect(decoration.border, Border.all(color: borderColor));
+    expect(decoration.borderRadius, BorderRadius.circular(34));
+    expect(decoration.border, isNull);
+    expect(decoration.boxShadow, isNotEmpty);
   });
 
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -636,7 +637,7 @@ void main() {
       menuList.padding,
       EdgeInsets.fromLTRB(
         16,
-        8,
+        16,
         16,
         settingsBottomNavigationClearance(
           tester.element(find.byKey(const Key('settings-menu-list'))),
@@ -650,8 +651,8 @@ void main() {
           .first,
     );
     final menuDecoration = menuSurface.decoration! as BoxDecoration;
-    expect(menuDecoration.boxShadow, isNull);
-    expect(menuDecoration.border, isNotNull);
+    expect(menuDecoration.boxShadow, isNotEmpty);
+    expect(menuDecoration.border, isNull);
 
     final encoderTitle = tester.widget<Text>(find.text('Encoder'));
     final encoderRow = find
@@ -662,7 +663,7 @@ void main() {
     );
     expect(encoderTitle.style?.fontFamily, 'Manrope');
     expect(encoderTitle.style?.fontSize, 20);
-    expect(encoderTitle.style?.fontWeight, FontWeight.w600);
+    expect(encoderTitle.style?.fontWeight, FontWeight.w700);
     expect(encoderTitle.style?.height, 1.2);
     expect(encoderDescription.style?.fontFamily, 'Manrope');
     expect(encoderDescription.style?.fontSize, 15);
@@ -715,7 +716,7 @@ void main() {
       detailList.padding,
       EdgeInsets.fromLTRB(
         16,
-        8,
+        20,
         16,
         settingsBottomNavigationClearance(
           tester.element(find.byKey(const Key('settings-detail-list'))),
@@ -723,12 +724,7 @@ void main() {
       ),
     );
     final title = tester.widget<Text>(find.text('Encoder'));
-    expect(
-      title.style?.fontSize,
-      Theme.of(
-        tester.element(find.text('Encoder')),
-      ).textTheme.titleLarge?.fontSize,
-    );
+    expect(title.style?.fontSize, 28);
     final back = find.bySemanticsLabel('Back to settings');
     expect(tester.getSize(back), const Size(48, 48));
     expect(
@@ -1247,7 +1243,7 @@ void main() {
         );
         expect(
           (detailList.padding! as EdgeInsets).bottom,
-          greaterThanOrEqualTo(114),
+          greaterThanOrEqualTo(106),
         );
 
         await tester.tap(find.bySemanticsLabel('Back to settings'));

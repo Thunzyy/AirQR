@@ -20,7 +20,7 @@ class HistoryKeepLocalResult {
   const HistoryKeepLocalResult({required this.fileName});
 }
 
-enum HistorySyncItemStatus { queued, syncNotConfigured, fileNotFound, failed }
+enum HistorySyncItemStatus { synced, syncNotConfigured, fileNotFound, failed }
 
 class HistorySyncItemResult {
   final HistorySyncItemStatus status;
@@ -33,9 +33,9 @@ class HistorySyncItemResult {
     this.error,
   });
 
-  factory HistorySyncItemResult.queued(String fileName) {
+  factory HistorySyncItemResult.synced(String fileName) {
     return HistorySyncItemResult._(
-      status: HistorySyncItemStatus.queued,
+      status: HistorySyncItemStatus.synced,
       fileName: fileName,
     );
   }
@@ -138,10 +138,10 @@ class HistoryPageActions {
   Future<HistorySyncItemResult> syncItem(HistoryItem item) async {
     final fileName = p.basename(item.path);
 
-    await HistoryService.enableSync(item.path);
-
     final settings = await SyncSettingsService.load();
-    if (!settings.isConfigured) {
+    if (!settings.isConfigured ||
+        (item.origin == 'scanned' && !settings.syncScanned) ||
+        (item.origin == 'generated' && !settings.syncGenerated)) {
       return HistorySyncItemResult.syncNotConfigured(fileName);
     }
 
@@ -154,21 +154,25 @@ class HistoryPageActions {
       final fileBytes = await file.readAsBytes();
       final safeFilename = sanitizeId(fileName);
       final uniqueId = '${item.origin}_${safeFilename}_${item.timestamp}';
+      final serverId = item.serverId?.isNotEmpty == true
+          ? item.serverId!
+          : 'mobile_$uniqueId';
       final isoTimestamp = DateTime.fromMillisecondsSinceEpoch(
         item.timestamp,
       ).toUtc().toIso8601String();
 
+      final SyncResult result;
       if (item.origin == 'scanned') {
-        await SyncService.uploadScan(
-          sessionId: 'mobile_$uniqueId',
+        result = await SyncService.uploadScan(
+          sessionId: serverId,
           filename: fileName,
           fileBytes: fileBytes,
           mimeType: item.mimeType ?? 'application/octet-stream',
           completedAt: isoTimestamp,
         );
       } else if (item.origin == 'generated') {
-        await SyncService.uploadGenerated(
-          historyId: 'mobile_$uniqueId',
+        result = await SyncService.uploadGenerated(
+          historyId: serverId,
           filename: fileName,
           fileBytes: fileBytes,
           mimeType: item.mimeType ?? 'application/octet-stream',
@@ -177,9 +181,21 @@ class HistoryPageActions {
           minFrames: item.minFrames,
           chunkMinFrames: item.chunkMinFrames,
         );
+      } else {
+        return HistorySyncItemResult.failed(
+          fileName,
+          'Unsupported history origin',
+        );
       }
-
-      return HistorySyncItemResult.queued(fileName);
+      if (!result.success || result.uploadedCount == 0) {
+        return HistorySyncItemResult.failed(
+          fileName,
+          result.error ?? 'Upload was not confirmed by the server',
+        );
+      }
+      await HistoryService.enableSync(item.path);
+      await HistoryService.markAsSynced(item.path, serverId);
+      return HistorySyncItemResult.synced(fileName);
     } catch (error) {
       return HistorySyncItemResult.failed(fileName, error);
     }
@@ -214,7 +230,7 @@ class HistoryPageActions {
         }
       }
 
-      return HistorySyncItemResult.queued(fileName);
+      return HistorySyncItemResult.synced(fileName);
     } catch (error) {
       return HistorySyncItemResult.failed(fileName, error);
     }

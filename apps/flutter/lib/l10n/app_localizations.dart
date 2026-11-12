@@ -929,7 +929,7 @@ abstract class AppLocalizations {
   /// No description provided for @decoder_notAirQrGif.
   ///
   /// In en, this message translates to:
-  /// **'This GIF is not an AirQR transfer. Encode a file in the Encode tab first, then decode that GIF — or try the sample below.'**
+  /// **'This GIF is not an AirQR transfer. Encode a file in the Encode tab first, then decode that GIF.'**
   String get decoder_notAirQrGif;
 
   /// No description provided for @decoder_notAirQrStatus.
@@ -955,30 +955,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Decode only works with GIFs created by AirQR, not a regular photo GIF.'**
   String get decoder_airQrOnlyHint;
-
-  /// No description provided for @decoder_trySample.
-  ///
-  /// In en, this message translates to:
-  /// **'Try a sample GIF'**
-  String get decoder_trySample;
-
-  /// No description provided for @decoder_sampleFilename.
-  ///
-  /// In en, this message translates to:
-  /// **'airqr-sample.txt'**
-  String get decoder_sampleFilename;
-
-  /// No description provided for @decoder_sampleNote.
-  ///
-  /// In en, this message translates to:
-  /// **'Hello from AirQR.\nThis note was recovered from an animated QR GIF.'**
-  String get decoder_sampleNote;
-
-  /// No description provided for @decoder_sampleFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Could not build the sample GIF.'**
-  String get decoder_sampleFailed;
 
   /// No description provided for @decoder_noGifInZip.
   ///
@@ -1640,7 +1616,7 @@ abstract class AppLocalizations {
   /// No description provided for @history_syncQueued.
   ///
   /// In en, this message translates to:
-  /// **'\"{filename}\" queued for sync'**
+  /// **'\"{filename}\" synced'**
   String history_syncQueued(String filename);
 
   /// No description provided for @history_syncFailed.
@@ -2996,7 +2972,7 @@ abstract class AppLocalizations {
   /// No description provided for @history_bulkSyncQueued.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, one {{count} item queued for sync} other {{count} items queued for sync}}'**
+  /// **'{count, plural, one {{count} item synced} other {{count} items synced}}'**
   String history_bulkSyncQueued(int count);
 
   /// No description provided for @history_bulkKeptLocal.

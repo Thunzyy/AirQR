@@ -83,6 +83,13 @@ interface UploadTask {
   onFailure?: (error: string) => void | Promise<void>;
 }
 
+function reportUploadFailure(callback: UploadTask['onFailure'], message: string): void {
+  if (!callback) return;
+  void Promise.resolve().then(() => callback(message)).catch((error) => {
+    logger.warn('onFailure handler failed', { error: String(error) });
+  });
+}
+
 const MAX_IN_FLIGHT = 2;
 const MAX_RETRIES = 5;
 const RETRY_BASE_DELAY_MS = 500;
@@ -202,6 +209,7 @@ async function sendTask(task: UploadTask): Promise<void> {
       headers,
       body,
       credentials,
+      signal: AbortSignal.timeout(120_000),
       keepalive: payloadSize < 64000, // keepalive only for small payloads
     });
 
@@ -255,15 +263,7 @@ function scheduleRetry(task: UploadTask): void {
       endpoint: task.endpoint,
     });
     // Call onFailure callback if provided
-    if (task.onFailure) {
-      try {
-        task.onFailure(errorMessage);
-      } catch (err) {
-        logger.warn('onFailure handler failed', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
+    reportUploadFailure(task.onFailure, errorMessage);
     return;
   }
   const delay = Math.min(RETRY_BASE_DELAY_MS * 2 ** task.attempts, 10000);
@@ -377,11 +377,15 @@ export function queueScanComplete(
   onSuccess?: () => void | Promise<void>,
   onFailure?: (error: string) => void | Promise<void>
 ): void {
-  if (!shouldSyncScanned(config)) return;
-  if (!canAttemptScannedSync(config)) return;
+  if (!shouldSyncScanned(config) || !canAttemptScannedSync(config)) {
+    reportUploadFailure(onFailure, 'Scanned-file synchronization is disabled or unavailable');
+    return;
+  }
   const baseUrl = resolveServerBaseUrl(config.url);
-  if (!baseUrl) return;
-  if (!meta.sessionId) return;
+  if (!baseUrl || !meta.sessionId) {
+    reportUploadFailure(onFailure, 'Invalid sync server or session ID');
+    return;
+  }
   const sessionId = meta.sessionId;
   const completedAt = meta.completedAt || new Date().toISOString();
   const fileSize = getBinaryDataSize(fileData);
@@ -460,9 +464,7 @@ export function queueScanComplete(
         error: error instanceof Error ? error.message : String(error),
         sessionId,
       });
-      if (onFailure) {
-        void onFailure(message);
-      }
+      reportUploadFailure(onFailure, message);
     }
   })();
 }
@@ -499,19 +501,23 @@ export function queueHistoryItem(
 
   if (!shouldSyncGenerated(config)) {
     logger.info(`[queueHistoryItem] Skipping - shouldSyncGenerated is false`);
+    reportUploadFailure(onFailure, 'Generated-file synchronization is disabled');
     return;
   }
   if (!isServerSyncAuthorizedSnapshot(config)) {
     logger.info(`[queueHistoryItem] Skipping - server auth not ready`);
+    reportUploadFailure(onFailure, 'Server authentication is not ready');
     return;
   }
   const baseUrl = resolveServerBaseUrl(config.url);
   if (!baseUrl) {
     logger.info(`[queueHistoryItem] Skipping - no valid baseUrl from ${config.url}`);
+    reportUploadFailure(onFailure, 'Invalid sync server');
     return;
   }
   if (!meta.historyId) {
     logger.info(`[queueHistoryItem] Skipping - no historyId`);
+    reportUploadFailure(onFailure, 'Missing history ID');
     return;
   }
 
@@ -580,9 +586,7 @@ export function queueHistoryItem(
         error: error instanceof Error ? error.message : String(error),
         historyId: meta.historyId,
       });
-      if (onFailure) {
-        void onFailure(message);
-      }
+      reportUploadFailure(onFailure, message);
     }
   })();
 }

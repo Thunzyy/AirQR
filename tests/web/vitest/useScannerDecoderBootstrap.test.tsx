@@ -242,7 +242,13 @@ describe("useScannerDecoderBootstrap", () => {
     });
 
     expect(handleDecodedData).not.toHaveBeenCalled();
-    expect(overlayContext.clearRect).toHaveBeenCalledWith(0, 0, 320, 180);
+    expect(overlayContext.clearRect).not.toHaveBeenCalled();
+    expect(args.isProcessingFrameRef.current).toBe(true);
+    act(() => workerRef.current?.onmessage?.({data: {
+      type: "SCAN_RESULT", requestId: 3, found: true,
+      binaryData: new Uint8Array([1, 2, 3]).buffer,
+    }}));
+    expect(handleDecodedData).toHaveBeenCalledWith(new Uint8Array([1, 2, 3]));
     expect(args.isProcessingFrameRef.current).toBe(false);
   });
 });

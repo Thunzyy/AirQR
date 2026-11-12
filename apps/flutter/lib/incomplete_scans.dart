@@ -731,7 +731,7 @@ class IncompleteScanService {
 
     final dir = await _packetsDirectoryFor(serverId, createRoot: true);
     if (dir == null) {
-      _currentScanId = null;
+      if (_currentScanId == serverId.value) _currentScanId = null;
       throw FileSystemException(
         'Unsafe incomplete scan directory',
         serverId.value,
@@ -739,7 +739,7 @@ class IncompleteScanService {
     }
     await dir.create(recursive: true);
 
-    return _currentScanId!;
+    return serverId.value;
   }
 
   /// Save a packet for the current scan session
@@ -782,15 +782,17 @@ class IncompleteScanService {
     required int expectedPackets,
     String? filename,
   }) async {
-    if (_currentScanId == null) return;
+    final currentScanId = _currentScanId;
+    if (currentScanId == null) return;
 
     final list = await getAll();
+    if (_currentScanId != currentScanId) return;
     final timestamp = DateTime.now().millisecondsSinceEpoch;
 
     final existingScan = list.firstWhere(
-      (s) => s.id == _currentScanId,
+      (s) => s.id == currentScanId,
       orElse: () => IncompleteScan(
-        id: _currentScanId!,
+        id: currentScanId,
         startTimestamp: timestamp,
         lastUpdateTimestamp: timestamp,
         progress: 0.0,
@@ -799,7 +801,7 @@ class IncompleteScanService {
       ),
     );
 
-    list.removeWhere((s) => s.id == _currentScanId);
+    list.removeWhere((s) => s.id == currentScanId);
 
     final safeFilename =
         normalizeScanFilename(filename) ?? existingScan.filename;
@@ -807,7 +809,7 @@ class IncompleteScanService {
     list.insert(
       0,
       IncompleteScan(
-        id: _currentScanId!,
+        id: currentScanId,
         startTimestamp: existingScan.startTimestamp,
         lastUpdateTimestamp: timestamp,
         progress: normalizeIncompleteProgress(progress),
@@ -886,10 +888,11 @@ class IncompleteScanService {
 
   /// Complete the current scan (remove from incomplete list)
   static Future<void> completeCurrentScan() async {
+    final currentScanId = _currentScanId;
     debugPrint(
       '🏁 SCAN_LOG: completeCurrentScan called, _currentScanId=$_currentScanId',
     );
-    if (_currentScanId == null) {
+    if (currentScanId == null) {
       debugPrint('🏁 SCAN_LOG: _currentScanId is null, returning early!');
       return;
     }
@@ -897,9 +900,9 @@ class IncompleteScanService {
     debugPrint(
       '🏁 SCAN_LOG: Removing scan $_currentScanId from incomplete list',
     );
-    await remove(_currentScanId!);
+    await remove(currentScanId);
     debugPrint('🏁 SCAN_LOG: Scan removed, setting _currentScanId to null');
-    _currentScanId = null;
+    if (_currentScanId == currentScanId) _currentScanId = null;
   }
 
   /// Remove an incomplete scan

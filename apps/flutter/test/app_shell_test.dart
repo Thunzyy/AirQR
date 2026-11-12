@@ -125,7 +125,7 @@ void main() {
         final safeRight = navRect.right + 1;
 
         expect(indicatorRect.width, closeTo(itemWidth + 17, 1));
-        expect(indicatorRect.height, greaterThanOrEqualTo(68));
+        expect(indicatorRect.height, greaterThanOrEqualTo(60));
         expect(indicatorRect.center.dx, closeTo(activeCenter, 1));
         expect(itemRect.center.dx, closeTo(indicatorRect.center.dx, 1));
         expect(indicatorRect.left, greaterThanOrEqualTo(safeLeft));
@@ -179,7 +179,7 @@ void main() {
       ).withValues(alpha: 1),
     );
     expect(decoration.color?.a, 1);
-    expect(decoration.boxShadow, isNull);
+    expect(decoration.boxShadow, isNotEmpty);
   });
 
   testWidgets('Bottom nav pointer overlays stay transparent', (tester) async {
@@ -275,8 +275,8 @@ void main() {
     expect(labelRect.bottom, lessThanOrEqualTo(indicatorRect.bottom));
     expect(labelRect.left - indicatorRect.left, greaterThanOrEqualTo(8));
     expect(indicatorRect.right - labelRect.right, greaterThanOrEqualTo(8));
-    expect(iconRect.top - indicatorRect.top, greaterThanOrEqualTo(12));
-    expect(indicatorRect.bottom - labelRect.bottom, greaterThanOrEqualTo(13));
+    expect(iconRect.top - indicatorRect.top, greaterThanOrEqualTo(8));
+    expect(indicatorRect.bottom - labelRect.bottom, greaterThanOrEqualTo(9));
   });
 
   testWidgets('Bottom nav keeps every normal-scale label fully readable', (

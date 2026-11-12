@@ -5,6 +5,9 @@ import 'package:airqr_mobile/history_item.dart';
 import 'package:airqr_mobile/history_page_actions.dart';
 import 'package:airqr_mobile/history_service.dart';
 import 'package:airqr_mobile/sync_settings.dart';
+import 'package:airqr_mobile/sync_service.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,11 +20,14 @@ void main() {
 
     setUp(() async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
+      SyncService.clearCache();
       actions = HistoryPageActions();
       tempDir = await Directory.systemTemp.createTemp('airqr-history-actions');
     });
 
     tearDown(() async {
+      SyncService.setHttpClientForTesting(null);
+      SyncService.clearCache();
       if (await tempDir.exists()) {
         await tempDir.delete(recursive: true);
       }
@@ -134,5 +140,92 @@ void main() {
       expect(await scannedFile.exists(), isFalse);
       expect(await HistoryService.getHistory(), isEmpty);
     });
+
+    for (final origin in ['scanned', 'generated']) {
+      test(
+        'manual $origin sync confirms upload and preserves session identity',
+        () async {
+          SharedPreferences.setMockInitialValues({
+            'airqr_sync_settings': jsonEncode(
+              const SyncSettings(
+                enabled: true,
+                serverUrl: 'https://airqr.test',
+              ).toJson(),
+            ),
+          });
+          final file = File('${tempDir.path}/payload.bin');
+          await file.writeAsBytes([1, 2, 3]);
+          final item = HistoryItem(
+            path: file.path,
+            timestamp: 99,
+            size: 3,
+            origin: origin,
+            serverId: 'shared-session',
+            isLocalOnly: true,
+          );
+          await HistoryService.addItem(item);
+          var statusCode = 503;
+          final requests = <http.Request>[];
+          SyncService.setHttpClientForTesting(
+            MockClient((request) async {
+              requests.add(request);
+              return http.Response('{}', statusCode);
+            }),
+          );
+
+          final failed = await actions.syncItem(item);
+          expect(failed.status, HistorySyncItemStatus.failed);
+          var stored = (await HistoryService.getHistory()).single;
+          expect(stored.isSynced, isFalse);
+          expect(stored.isLocalOnly, isTrue);
+
+          statusCode = 200;
+          final retry = await actions.syncItem(item);
+          expect(retry.status, HistorySyncItemStatus.synced);
+          stored = (await HistoryService.getHistory()).single;
+          expect(stored.isSynced, isTrue);
+          expect(stored.isLocalOnly, isFalse);
+          expect(stored.serverId, 'shared-session');
+          expect(requests, hasLength(2));
+          for (final request in requests) {
+            expect(request.url.queryParameters.values, contains('shared-session'));
+            expect(request.bodyBytes, [1, 2, 3]);
+          }
+        },
+      );
+
+      test(
+        'disabled $origin synchronization is not reported as success',
+        () async {
+          SharedPreferences.setMockInitialValues({
+            'airqr_sync_settings': jsonEncode(
+              SyncSettings(
+                enabled: true,
+                serverUrl: 'https://airqr.test',
+                syncScanned: origin != 'scanned',
+                syncGenerated: origin != 'generated',
+              ).toJson(),
+            ),
+          });
+          var requests = 0;
+          SyncService.setHttpClientForTesting(
+            MockClient((request) async {
+              requests++;
+              return http.Response('{}', 200);
+            }),
+          );
+          final result = await actions.syncItem(
+            HistoryItem(
+              path: '${tempDir.path}/unused.bin',
+              timestamp: 99,
+              size: 3,
+              origin: origin,
+            ),
+          );
+          expect(result.status, HistorySyncItemStatus.syncNotConfigured);
+          expect(requests, 0);
+        },
+      );
+    }
   });
 }

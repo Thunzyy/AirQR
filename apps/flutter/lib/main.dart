@@ -25,6 +25,8 @@ import 'scanner_completion_flow_controller.dart';
 import 'scanner_local_decode_controller.dart';
 import 'scanner_local_result_controller.dart';
 import 'scanner_frame_controller.dart';
+import 'scanner_operation_controller.dart';
+import 'scanner_analysis_metrics.dart';
 import 'scanner_mobile_controller_controller.dart';
 import 'scanner_page_state_controller.dart';
 import 'scanner_page_chrome.dart';
@@ -229,6 +231,9 @@ class _ScannerPageState extends State<ScannerPage> {
   bool _isTorchOn = false; // Track torch state locally
 
   int _fps = 0;
+  int? _analysisFps;
+  Timer? _analysisFpsTimer;
+  bool _analysisFpsPending = false;
   int _framesInCurrentSecond = 0;
   int _lastFpsUpdate = 0;
   int? _currentChunkNumber;
@@ -248,6 +253,7 @@ class _ScannerPageState extends State<ScannerPage> {
       MobileCameraFacingPreference.back;
 
   String? _currentScanId;
+  String? _rescanAllowedSessionId;
   String? _currentFilename;
   int _receivedPackets = 0; // Track received packets from decoder
   int _expectedPackets = 0; // Track expected packets from decoder
@@ -445,6 +451,23 @@ class _ScannerPageState extends State<ScannerPage> {
     _refreshSyncConnection();
     _setupWebSocketListener();
     _startGlobalCountersPolling();
+    if (Platform.isIOS) {
+      _analysisFpsTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+        if (_analysisFpsPending || _isDisposed) return;
+        _analysisFpsPending = true;
+        final generation = _scannerOperations.generation;
+        try {
+          final fps = await ScannerAnalysisMetrics.readFps();
+          if (mounted &&
+              !_isDisposed &&
+              _scannerOperations.isCurrent(generation)) {
+            setState(() => _analysisFps = _isCaptureActive ? fps : 0);
+          }
+        } finally {
+          _analysisFpsPending = false;
+        }
+      });
+    }
   }
 
   Future<void> _refreshSyncConnection() async {
@@ -491,6 +514,8 @@ class _ScannerPageState extends State<ScannerPage> {
     String? sessionId,
     bool force = false,
   }) async {
+    if (_isReloading || _isDisposed) return;
+    final generation = _scannerOperations.generation;
     final request = _scannerRemoteSnapshotController.prepareRequest(
       state: ScannerRemoteSnapshotRequestState(
         syncScannedEnabled: _syncScannedEnabled,
@@ -506,12 +531,18 @@ class _ScannerPageState extends State<ScannerPage> {
 
     _lastRemoteProgressFetch = request.nextLastRemoteProgressFetch;
     _remoteProgressInFlight = true;
+    final requestToken = Object();
+    _remoteProgressRequestToken = requestToken;
 
     try {
       final sessionInfo = await SyncService.fetchSessionInfo(
         request.targetSessionId,
       );
-      if (!mounted || _isDisposed) return;
+      if (!mounted ||
+          _isDisposed ||
+          !_scannerOperations.isCurrent(generation)) {
+        return;
+      }
 
       final snapshotResult = await _scannerRemoteSnapshotController
           .applySnapshot(
@@ -531,9 +562,11 @@ class _ScannerPageState extends State<ScannerPage> {
             targetSessionId: request.targetSessionId,
             sessionInfo: sessionInfo,
           );
-      if (snapshotResult == null) return;
+      if (snapshotResult == null || !_scannerOperations.isCurrent(generation)) {
+        return;
+      }
 
-      if (mounted && !_isDisposed) {
+      if (mounted && !_isDisposed && _scannerOperations.isCurrent(generation)) {
         setState(() {
           _remoteReceivedPackets = snapshotResult.remoteReceivedPackets;
           _remoteExpectedPackets = snapshotResult.remoteExpectedPackets;
@@ -546,7 +579,10 @@ class _ScannerPageState extends State<ScannerPage> {
         });
       }
     } finally {
-      _remoteProgressInFlight = false;
+      if (identical(_remoteProgressRequestToken, requestToken)) {
+        _remoteProgressInFlight = false;
+        _remoteProgressRequestToken = null;
+      }
     }
   }
 
@@ -564,6 +600,8 @@ class _ScannerPageState extends State<ScannerPage> {
   }
 
   Future<void> _handleRemoteScanProgress(SyncEvent event) async {
+    if (_isReloading || _isResuming || _isDisposed) return;
+    final generation = _scannerOperations.generation;
     final transition = await _scannerRemoteEventController.handleProgress(
       state: ScannerRemoteEventState(
         canScanLocally: _canScanLocally,
@@ -584,7 +622,9 @@ class _ScannerPageState extends State<ScannerPage> {
       ),
       event: event,
     );
-    if (!mounted || _isDisposed) return;
+    if (!mounted || _isDisposed || !_scannerOperations.isCurrent(generation)) {
+      return;
+    }
 
     if (transition case ScannerRemoteProgressIgnoredTransition()) {
       return;
@@ -615,6 +655,8 @@ class _ScannerPageState extends State<ScannerPage> {
   }
 
   Future<void> _handleRemoteScanComplete(SyncEvent event) async {
+    if (_isReloading || _isResuming || _isDisposed) return;
+    final generation = _scannerOperations.generation;
     final result = await _scannerRemoteEventController.handleCompletion(
       state: ScannerRemoteEventState(
         canScanLocally: _canScanLocally,
@@ -636,11 +678,15 @@ class _ScannerPageState extends State<ScannerPage> {
       event: event,
     );
 
-    if (result == null) return;
+    if (result == null ||
+        !mounted ||
+        _isDisposed ||
+        !_scannerOperations.isCurrent(generation)) {
+      return;
+    }
 
     _completionHandled = result.completionHandled;
     _isCaptureActive = result.isCaptureActive;
-    _isProcessing = result.isProcessing;
 
     if (controller != null && !_isDisposed) {
       try {
@@ -648,7 +694,7 @@ class _ScannerPageState extends State<ScannerPage> {
       } catch (_) {}
     }
 
-    if (mounted && !_isDisposed) {
+    if (mounted && !_isDisposed && _scannerOperations.isCurrent(generation)) {
       setState(() {
         _currentScanId = result.currentScanId;
         _isExplicitResume = result.isExplicitResume;
@@ -697,7 +743,7 @@ class _ScannerPageState extends State<ScannerPage> {
       }
     }
 
-    if (mounted && !_isDisposed) {
+    if (mounted && !_isDisposed && _scannerOperations.isCurrent(generation)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result.snackBarMessage),
@@ -723,6 +769,8 @@ class _ScannerPageState extends State<ScannerPage> {
     final result = await _scannerSessionResolutionController.resolve(
       qrSessionId: qrSessionId,
       isExplicitResume: _isExplicitResume,
+      allowCompletedSession:
+          qrSessionId != null && qrSessionId == _rescanAllowedSessionId,
       ignoredCompletedSessionIds: _ignoredCompletedSessionIds,
     );
     _ignoredCompletedSessionIds
@@ -734,6 +782,8 @@ class _ScannerPageState extends State<ScannerPage> {
   @override
   void dispose() {
     _isDisposed = true;
+    _scannerOperations.invalidate();
+    _analysisFpsTimer?.cancel();
     widget.settingsChangedNotifier.removeListener(_onSettingsChanged);
     _resetTimer?.cancel();
     _wsSubscription?.cancel();
@@ -824,12 +874,12 @@ class _ScannerPageState extends State<ScannerPage> {
         _isCaptureActive = beginResume.isCaptureActive;
       });
     }
-    _isProcessing = beginResume.isProcessing;
 
     try {
       debugPrint('🔄 RESUME_LOG: Starting resume for scanId=$scanId');
 
-      resetDecoder();
+      await _scannerOperations.restart(resetDecoder);
+      if (!mounted || _isDisposed) return;
       final resumeState = await _scannerResumeController.loadResume(scanId);
       final loadedResume = _scannerResumeFlowController.applyLoadedResume(
         resumeState: resumeState,
@@ -1062,7 +1112,13 @@ class _ScannerPageState extends State<ScannerPage> {
     }
   }
 
-  Future<void> _reloadController() async {
+  Future<void>? _controllerReload;
+
+  Future<void> _reloadController() => _controllerReload ??=
+      _performControllerReload().whenComplete(() => _controllerReload = null);
+
+  Future<void> _performControllerReload() async {
+    _scannerOperations.invalidate();
     final startReload = _scannerMobileControllerController.beginReload(
       isDisposed: _isDisposed,
       supportsMobileScanner: _supportsMobileScanner,
@@ -1078,15 +1134,13 @@ class _ScannerPageState extends State<ScannerPage> {
       _isTorchOn = start.isTorchOn;
     });
 
-    _isProcessing = start.isProcessing;
     final oldController = controller;
     controller = null;
 
     final finishReload = await _scannerMobileControllerController
         .performReload<MobileScannerController>(
           oldController: oldController,
-          waitForIdle: () =>
-              Future<void>.delayed(const Duration(milliseconds: 150)),
+          waitForIdle: () => _scannerOperations.idle,
           stopController: (existingController) => existingController.stop(),
           disposeController: (existingController) =>
               existingController.dispose(),
@@ -1111,7 +1165,8 @@ class _ScannerPageState extends State<ScannerPage> {
     });
   }
 
-  bool _isProcessing = false;
+  final _scannerOperations = ScannerOperationController();
+  Object? _remoteProgressRequestToken;
 
   Future<void> _selectMobileCamera(CameraFacing facing) async {
     final activeController = controller;
@@ -1131,24 +1186,30 @@ class _ScannerPageState extends State<ScannerPage> {
       return;
     }
 
-    // Drop frame if we are already processing one
-    if (_isProcessing) return;
-
-    _isProcessing = true;
-    // Process asynchronously to not block the camera stream
-    _processBarcode(capture).whenComplete(() {
-      if (!_isDisposed) {
-        _isProcessing = false;
-      }
-    });
+    unawaited(
+      _scannerOperations.process((generation) async {
+        try {
+          await _processBarcode(capture, generation);
+        } catch (error, stack) {
+          debugPrint('Scanner packet failed: $error\n$stack');
+          if (mounted &&
+              !_isDisposed &&
+              _scannerOperations.isCurrent(generation)) {
+            setState(() => _status = 'Error processing chunk: $error');
+          }
+        }
+      }),
+    );
   }
 
-  Future<void> _processBarcode(BarcodeCapture capture) async {
-    if (_isDisposed) return;
+  Future<void> _processBarcode(BarcodeCapture capture, int generation) async {
+    bool isCurrent() =>
+        mounted && !_isDisposed && _scannerOperations.isCurrent(generation);
+    if (!isCurrent()) return;
 
     final List<Barcode> barcodes = capture.barcodes;
     for (final barcode in barcodes) {
-      if (_isDisposed) return;
+      if (!isCurrent()) return;
 
       if (barcode.rawBytes != null) {
         final frameTransition = _scannerFrameController.handleFrame(
@@ -1179,7 +1240,7 @@ class _ScannerPageState extends State<ScannerPage> {
         }
         final now = acceptedFrame.nowMillis;
 
-        if (!_isDisposed && mounted) {
+        if (isCurrent()) {
           setState(() {
             _corners = barcode.corners;
             _imageSize = capture.size;
@@ -1189,7 +1250,7 @@ class _ScannerPageState extends State<ScannerPage> {
 
         _resetTimer?.cancel();
         _resetTimer = Timer(const Duration(milliseconds: 100), () {
-          if (mounted && !_isDisposed) {
+          if (isCurrent()) {
             setState(() {
               _corners = [];
               _overlayColor = Colors.transparent;
@@ -1208,14 +1269,14 @@ class _ScannerPageState extends State<ScannerPage> {
         } catch (e, stackTrace) {
           debugPrint('DartScanner: Exception invoking processChunk: $e');
           debugPrint('DartScanner: StackTrace: $stackTrace');
-          if (!mounted || _isDisposed) return;
+          if (!isCurrent()) return;
           setState(() {
             _status = "Error processing chunk: $e";
           });
           return;
         }
 
-        if (!mounted || _isDisposed) return;
+        if (!isCurrent()) return;
 
         final flowTransition = await _scannerBarcodeFlowController.handle(
           result: result,
@@ -1246,6 +1307,8 @@ class _ScannerPageState extends State<ScannerPage> {
           nowMillis: now,
           localSyncSourceName: _localSyncSourceName(),
         );
+
+        if (!isCurrent()) return;
 
         if (flowTransition case ScannerBarcodeIgnoredTransition()) {
           if (result.status == 'Completed') {
@@ -1289,7 +1352,7 @@ class _ScannerPageState extends State<ScannerPage> {
 
           if (progressFlow.progressUpdate.shouldApplyWidgetUpdate) {
             _lastUpdateTime = progressFlow.progressUpdate.lastUpdateTime;
-            if (!_isDisposed && mounted) {
+            if (isCurrent()) {
               setState(() {
                 _progress = progressFlow.progressUpdate.progress;
                 if (!_hasSessionProgressStatus) {
@@ -1325,7 +1388,7 @@ class _ScannerPageState extends State<ScannerPage> {
           _remoteMissingPackets = 0;
           _remoteChunks = const <ScannerChunkProgressInfo>[];
 
-          if (!_isDisposed && mounted) {
+          if (isCurrent()) {
             setState(() {
               _progress = completionUpdate.progress;
               _status = completionUpdate.status;
@@ -1353,7 +1416,7 @@ class _ScannerPageState extends State<ScannerPage> {
                     ? () => controller!.stop()
                     : null,
               );
-          if (!_isDisposed && mounted) {
+          if (mounted && isCurrent()) {
             if (completionFlow
                 case ScannerCompletionFlowSavedTransition success) {
               ScaffoldMessenger.of(
@@ -1373,7 +1436,7 @@ class _ScannerPageState extends State<ScannerPage> {
         }
 
         if (flowTransition case ScannerBarcodeErrorFlowTransition errorFlow) {
-          if (!_isDisposed && mounted) {
+          if (isCurrent()) {
             setState(() {
               _status = errorFlow.errorUpdate.status;
             });
@@ -1384,74 +1447,85 @@ class _ScannerPageState extends State<ScannerPage> {
     }
   }
 
-  void _reset() {
-    if (_isDisposed || _isReloading) return;
+  Future<void> _reset() async {
+    if (_isDisposed || _isReloading || _isResuming) return;
+    _rescanAllowedSessionId = _currentScanId ?? _resultSessionId;
+    setState(() {
+      _isReloading = true;
+      _isCaptureActive = false;
+    });
+    _resetTimer?.cancel();
+    try {
+      await _scannerOperations.restart(() async {
+        await resetDecoder();
+        if (!mounted || _isDisposed) return;
+        _isExplicitResume = false;
+        _remoteProgressInFlight = false;
+        _remoteProgressRequestToken = null;
+        IncompleteScanService.clearCurrentScan();
+        _ignoredCompletedSessionIds.clear();
+        final resetUpdate = _scannerPageStateController.applyReset(
+          localSyncSourceName: _localSyncSourceName(),
+        );
+        _currentScanId = resetUpdate.currentScanId;
+        _receivedPackets = resetUpdate.receivedPackets;
+        _expectedPackets = resetUpdate.expectedPackets;
+        _totalPackets = resetUpdate.totalPackets;
+        _currentFilename = resetUpdate.currentFilename;
+        _remoteReceivedPackets = resetUpdate.remoteReceivedPackets;
+        _remoteExpectedPackets = resetUpdate.remoteExpectedPackets;
+        _remoteTotalPackets = resetUpdate.remoteTotalPackets;
+        _remoteMissingPackets = resetUpdate.remoteMissingPackets;
+        _remoteChunks = const <ScannerChunkProgressInfo>[];
+        _lockSessionIdToCurrent = resetUpdate.lockSessionIdToCurrent;
+        _scanStartedAtMs = resetUpdate.scanStartedAtMs;
+        _resultFilename = resetUpdate.resultFilename;
+        _resultSessionId = resetUpdate.resultSessionId;
+        _resultSavedPath = resetUpdate.resultSavedPath;
+        _resultSubtitle = resetUpdate.resultSubtitle;
+        _resultIsNote = resetUpdate.resultIsNote;
+        _resultNoteContent = resetUpdate.resultNoteContent;
+        _resultFileSizeBytes = resetUpdate.resultFileSizeBytes;
+        _resultDurationSeconds = resetUpdate.resultDurationSeconds;
+        _isSavingResultToDevice = resetUpdate.isSavingResultToDevice;
+        _lastRemoteProgressFetch = resetUpdate.lastRemoteProgressFetch;
+        _completionHandled = resetUpdate.completionHandled;
+        _currentChunkNumber = null;
+        _currentChunkTotal = null;
+        _currentChunkFramesScanned = 0;
+        _localExactTotalPackets = null;
+        _currentStreamSessionId = null;
+        _chunkFrameCounter.reset();
 
-    resetDecoder();
-    IncompleteScanService.clearCurrentScan();
-    _ignoredCompletedSessionIds.clear();
-    final resetUpdate = _scannerPageStateController.applyReset(
-      localSyncSourceName: _localSyncSourceName(),
-    );
-    _currentScanId = resetUpdate.currentScanId;
-    _receivedPackets = resetUpdate.receivedPackets;
-    _expectedPackets = resetUpdate.expectedPackets;
-    _totalPackets = resetUpdate.totalPackets;
-    _currentFilename = resetUpdate.currentFilename;
-    _remoteReceivedPackets = resetUpdate.remoteReceivedPackets;
-    _remoteExpectedPackets = resetUpdate.remoteExpectedPackets;
-    _remoteTotalPackets = resetUpdate.remoteTotalPackets;
-    _remoteMissingPackets = resetUpdate.remoteMissingPackets;
-    _remoteChunks = const <ScannerChunkProgressInfo>[];
-    _lockSessionIdToCurrent = resetUpdate.lockSessionIdToCurrent;
-    _scanStartedAtMs = resetUpdate.scanStartedAtMs;
-    _resultFilename = resetUpdate.resultFilename;
-    _resultSessionId = resetUpdate.resultSessionId;
-    _resultSavedPath = resetUpdate.resultSavedPath;
-    _resultSubtitle = resetUpdate.resultSubtitle;
-    _resultIsNote = resetUpdate.resultIsNote;
-    _resultNoteContent = resetUpdate.resultNoteContent;
-    _resultFileSizeBytes = resetUpdate.resultFileSizeBytes;
-    _resultDurationSeconds = resetUpdate.resultDurationSeconds;
-    _isSavingResultToDevice = resetUpdate.isSavingResultToDevice;
-    _lastRemoteProgressFetch = resetUpdate.lastRemoteProgressFetch;
-    _completionHandled = resetUpdate.completionHandled;
-    _currentChunkNumber = null;
-    _currentChunkTotal = null;
-    _currentChunkFramesScanned = 0;
-    _localExactTotalPackets = null;
-    _currentStreamSessionId = null;
-    _chunkFrameCounter.reset();
+        if (!_isDisposed && mounted) {
+          setState(() {
+            _status = resetUpdate.status;
+            _progress = resetUpdate.progress;
+            _isScanning = resetUpdate.isScanning;
+            _isCaptureActive = resetUpdate.isCaptureActive;
+            _lastProcessedBytes = null;
+            _overlayColor = resetUpdate.overlayColor;
+            _corners = resetUpdate.corners;
+            _fps = resetUpdate.fps;
+            _framesInCurrentSecond = resetUpdate.framesInCurrentSecond;
+            _lastFpsUpdate = resetUpdate.lastFpsUpdate;
+            _syncSourceName = resetUpdate.syncSourceName;
+          });
+        }
 
-    if (!_isDisposed && mounted) {
-      setState(() {
-        _status = resetUpdate.status;
-        _progress = resetUpdate.progress;
-        _isScanning = resetUpdate.isScanning;
-        _isCaptureActive = resetUpdate.isCaptureActive;
-        _isProcessing = resetUpdate.isProcessing;
-        _lastProcessedBytes = null;
-        _overlayColor = resetUpdate.overlayColor;
-        _corners = resetUpdate.corners;
-        _fps = resetUpdate.fps;
-        _framesInCurrentSecond = resetUpdate.framesInCurrentSecond;
-        _lastFpsUpdate = resetUpdate.lastFpsUpdate;
-        _syncSourceName = resetUpdate.syncSourceName;
+        // Recreate the camera controller too: its detection state may still
+        // contain the QR just scanned or its capture session may be stopped.
+        if (_supportsMobileScanner) await _reloadController();
       });
-    }
-
-    // MobileScanner widget will automatically start the controller when mounted
-    // because autoStart is true by default.
-    // Removing manual start() here to prevent "controllerInitializing" race condition.
-    /*
-    if (controller != null && !_isDisposed) {
-      try {
-        controller!.start();
-      } catch (e) {
-        debugPrint('Error starting controller: $e');
+    } catch (error) {
+      if (mounted && !_isDisposed) {
+        setState(() => _status = 'Unable to restart scanner: $error');
+      }
+    } finally {
+      if (mounted && !_isDisposed) {
+        setState(() => _isReloading = false);
       }
     }
-    */
   }
 
   Future<void> _saveCurrentResultToDevice() async {
@@ -1642,7 +1716,7 @@ class _ScannerPageState extends State<ScannerPage> {
             ),
           ),
           ScannerChromeOverlay(
-            fps: _fps,
+            fps: _analysisFps ?? _fps,
             syncSourceName: _syncSourceName,
             showMobileCamera: showMobileCamera,
             showDesktopCamera: showDesktopCamera,

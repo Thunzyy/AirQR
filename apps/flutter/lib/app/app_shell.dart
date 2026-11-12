@@ -295,7 +295,7 @@ double _airQrBottomNavHeight(BuildContext context) {
   final scaledLabelHeight = MediaQuery.textScalerOf(context).scale(12);
   return scaledLabelHeight > 18
       ? 22 + 34 + 4 + (scaledLabelHeight * 1.15 * 2)
-      : 84.0;
+      : 76.0;
 }
 
 class AirQrBottomNav extends StatelessWidget {
@@ -336,6 +336,15 @@ class AirQrBottomNav extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AirQrTheme.navSurface(context).withValues(alpha: 1),
                 borderRadius: BorderRadius.circular(34),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(
+                      alpha: AirQrTheme.isDark(context) ? 0.42 : 0.22,
+                    ),
+                    offset: const Offset(0, 20),
+                    blurRadius: 70,
+                  ),
+                ],
               ),
               clipBehavior: Clip.none,
               child: LayoutBuilder(

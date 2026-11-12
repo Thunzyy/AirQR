@@ -81,6 +81,16 @@ class AirQrTypography extends ThemeExtension<AirQrTypography> {
 }
 
 class AirQrTheme {
+  // Same surface elevation as --airqr-shadow-soft in the web theme.
+  static List<BoxShadow> softShadow(BuildContext context) => [
+    BoxShadow(
+      color: isDark(context)
+          ? const Color(0x47000000)
+          : const Color(0x244F6275),
+      offset: const Offset(0, 22),
+      blurRadius: 58,
+    ),
+  ];
   static WidgetStateProperty<Color?> interactionOverlay(BuildContext context) {
     final color = textPrimary(context);
     return WidgetStateProperty.resolveWith((states) {

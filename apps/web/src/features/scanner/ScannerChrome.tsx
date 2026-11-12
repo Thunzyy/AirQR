@@ -532,6 +532,22 @@ const ScannerChrome: React.FC<ScannerChromeProps> = ({
         className="max-h-52 overflow-y-auto rounded-lg border border-amber-300/20 bg-black/65 p-2 text-[10px] font-mono text-white/75 shadow-xl backdrop-blur-md"
         style={{ width: "min(24rem, calc(100vw - 2rem))" }}
       >
+              {sessionStateLabels.length > 0 ? (
+                <div
+                  data-testid="scanner-session-state-summary"
+                  className="flex flex-wrap items-center gap-1.5 rounded-xl border border-lime-300/20 bg-lime-500/10 px-3 py-2 text-[11px] font-mono text-lime-100"
+                >
+                  {sessionStateLabels.map((label) => (
+                    <span
+                      key={label}
+                      className="min-w-0 rounded-full bg-black/25 px-2 py-0.5 break-words"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+
         {canonicalChunks.length > 1 ? (
           <div className="mb-2 min-w-0">
             <div className="mb-1 text-[9px] uppercase tracking-[0.12em] text-white/45">
@@ -994,22 +1010,6 @@ const ScannerChrome: React.FC<ScannerChromeProps> = ({
             </div>
 
             <div className="mt-3 flex flex-col gap-2">
-              {sessionStateLabels.length > 0 ? (
-                <div
-                  data-testid="scanner-session-state-summary"
-                  className="flex flex-wrap items-center gap-1.5 rounded-xl border border-lime-300/20 bg-lime-500/10 px-3 py-2 text-[11px] font-mono text-lime-100"
-                >
-                  {sessionStateLabels.map((label) => (
-                    <span
-                      key={label}
-                      className="min-w-0 rounded-full bg-black/25 px-2 py-0.5 break-words"
-                    >
-                      {label}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-
               {showBottomChunkSummary && hasChunkSummary ? (
                 <div
                   data-testid="scanner-chunk-summary"
@@ -1312,7 +1312,7 @@ const ScannerChrome: React.FC<ScannerChromeProps> = ({
                 </div>
               ) : null}
 
-              {progress > 0 ? (
+              {progress > 0 || hasSessionProgress ? (
                 <div className="airqr-progress-track h-2 w-full overflow-hidden rounded-full">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
@@ -1325,7 +1325,7 @@ const ScannerChrome: React.FC<ScannerChromeProps> = ({
 
               <div
                 data-testid="scanner-status-badge"
-                className={`rounded-xl border px-4 py-2 text-center shadow-sm transition-colors duration-300 ${
+                className={`flex min-h-12 items-center justify-center rounded-xl border px-4 py-2 text-center shadow-sm transition-colors duration-300 ${
                   progress >= 100
                     ? "airqr-status-success"
                     : "border-[var(--airqr-control-border)] bg-[var(--airqr-control-surface)] text-[var(--airqr-text-primary)]"

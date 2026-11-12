@@ -119,50 +119,6 @@ class _DecoderPageState extends State<DecoderPage> {
     }
   }
 
-  Future<void> _decodeSample() async {
-    setState(() {
-      _isDecoding = true;
-      _status = '__decoding__';
-      _error = null;
-      _guidance = null;
-      _resultData = null;
-    });
-
-    try {
-      final l10n = AppLocalizations.of(context)!;
-      final startTime = DateTime.now();
-      final encoded = await encodeToGif(
-        filename: l10n.decoder_sampleFilename,
-        data: utf8.encode(l10n.decoder_sampleNote),
-        fps: 5,
-        eccLevel: 'LOW',
-        packetSize: 80,
-        raptorqOverhead: 0.5,
-        compress: false,
-      );
-      if (!encoded.success || encoded.gifData == null) {
-        throw Exception(l10n.decoder_sampleFailed);
-      }
-      setState(() => _status = '__processingGif__');
-      final result = await decodeGifFile(gifData: encoded.gifData!);
-      if (!mounted) return;
-      _applyDecodeResult(result, startTime: startTime);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = AppLocalizations.of(context)!.decoder_sampleFailed;
-        _guidance = null;
-        _status = '__error__';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isDecoding = false;
-        });
-      }
-    }
-  }
-
   Future<Uint8List> _loadSelectedBytes() async {
     final inline = _selectedBytes;
     if (inline != null && inline.isNotEmpty) {
@@ -206,15 +162,11 @@ class _DecoderPageState extends State<DecoderPage> {
         errorMsg: result.errorMsg,
         qrDetected: result.qrDetected,
       ),
-      failedStatus:
-          '__failed__:${result.framesProcessed}:${result.qrDetected}',
+      failedStatus: '__failed__:${result.framesProcessed}:${result.qrDetected}',
     );
   }
 
-  void _presentFailure(
-    DecoderFailureKind kind, {
-    String? failedStatus,
-  }) {
+  void _presentFailure(DecoderFailureKind kind, {String? failedStatus}) {
     setState(() {
       if (decoderFailureShowsError(kind)) {
         _error = _messageForFailure(kind);
@@ -244,7 +196,7 @@ class _DecoderPageState extends State<DecoderPage> {
     if (_status == null) {
       return _hasSelectedSource
           ? l10n.decoder_fileSelected
-          : l10n.decoder_selectGifFile;
+          : l10n.decoder_tapToSelect;
     }
     if (_status == '__decoding__') return l10n.decoder_decoding;
     if (_status == '__processingZip__') return l10n.decoder_processingZip;
@@ -359,147 +311,151 @@ class _DecoderPageState extends State<DecoderPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // File Picker
-              Semantics(
-                key: const Key('decoder-file-picker-action'),
-                button: true,
-                label: AppLocalizations.of(context)!.decoder_selectGifFile,
-                onTap: _handlePickFile,
-                child: ExcludeSemantics(
-                  child: Tooltip(
-                    message: AppLocalizations.of(
-                      context,
-                    )!.decoder_selectGifFile,
-                    excludeFromSemantics: true,
-                    child: Material(
-                      color: AirQrTheme.card(context),
-                      borderRadius: BorderRadius.circular(30),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: _handlePickFile,
-                        borderRadius: BorderRadius.circular(30),
-                        overlayColor: AirQrTheme.interactionOverlay(context),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    key: const Key('decoder_file_picker_icon'),
-                                    width: 52,
-                                    height: 52,
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                      color: _hasSelectedSource
-                                          ? AirQrTheme.accentBlue.withValues(
-                                              alpha: 0.85,
-                                            )
-                                          : AirQrTheme.iconSurface(context),
-                                      shape: BoxShape.circle,
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(34),
+                  boxShadow: AirQrTheme.softShadow(context),
+                ),
+                child: Semantics(
+                  key: const Key('decoder-file-picker-action'),
+                  button: true,
+                  label: AppLocalizations.of(context)!.decoder_selectGifFile,
+                  onTap: _handlePickFile,
+                  child: ExcludeSemantics(
+                    child: Tooltip(
+                      message: AppLocalizations.of(
+                        context,
+                      )!.decoder_selectGifFile,
+                      excludeFromSemantics: true,
+                      child: Material(
+                        color: AirQrTheme.card(context),
+                        borderRadius: BorderRadius.circular(34),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: _handlePickFile,
+                          borderRadius: BorderRadius.circular(34),
+                          overlayColor: AirQrTheme.interactionOverlay(context),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      key: const Key(
+                                        'decoder_file_picker_icon',
+                                      ),
+                                      width: 64,
+                                      height: 64,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: _hasSelectedSource
+                                            ? AirQrTheme.accentBlue.withValues(
+                                                alpha: 0.85,
+                                              )
+                                            : AirQrTheme.iconSurface(context),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: AirQrIcon(
+                                        _hasSelectedSource
+                                            ? 'gif_box'
+                                            : 'upload_file',
+                                        size: 34,
+                                        color: _hasSelectedSource
+                                            ? Colors.white
+                                            : AirQrTheme.textPrimary(context),
+                                      ),
                                     ),
-                                    child: AirQrIcon(
-                                      _hasSelectedSource
-                                          ? 'gif_box'
-                                          : 'upload_file',
-                                      size: 28,
-                                      color: _hasSelectedSource
-                                          ? Colors.white
-                                          : AirQrTheme.textPrimary(context),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _hasSelectedSource
-                                                ? _fileName ??
-                                                      AppLocalizations.of(
-                                                        context,
-                                                      )!.encoder_fileSelected
-                                                : AppLocalizations.of(
-                                                    context,
-                                                  )!.decoder_selectFileCardTitle,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleLarge
-                                                ?.copyWith(
-                                                  height: 1.08,
-                                                  fontFamily:
-                                                      AirQrTypography.of(
-                                                            context,
-                                                          )
-                                                          .compactStatus
-                                                          .fontFamily,
-                                                  color: AirQrTheme.textPrimary(
-                                                    context,
-                                                  ),
-                                                ),
-                                          ),
-                                          if (_hasSelectedSource) ...[
-                                            const SizedBox(height: 6),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
                                             Text(
-                                              _fileSizeLabel ?? '',
-                                              style: AirQrTypography.of(context)
-                                                  .compactStatus
-                                                  .copyWith(
+                                              _hasSelectedSource
+                                                  ? _fileName ??
+                                                        AppLocalizations.of(
+                                                          context,
+                                                        )!.encoder_fileSelected
+                                                  : AppLocalizations.of(
+                                                      context,
+                                                    )!.decoder_selectFileCardTitle,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleLarge
+                                                  ?.copyWith(
+                                                    fontSize: 22,
+                                                    height: 1.25,
+                                                    fontFamily:
+                                                        AirQrTypography.of(
+                                                              context,
+                                                            )
+                                                            .compactStatus
+                                                            .fontFamily,
                                                     color:
-                                                        AirQrTheme.textSecondary(
+                                                        AirQrTheme.textPrimary(
                                                           context,
                                                         ),
                                                   ),
                                             ),
+                                            if (_hasSelectedSource) ...[
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                _fileSizeLabel ?? '',
+                                                style:
+                                                    AirQrTypography.of(
+                                                      context,
+                                                    ).compactStatus.copyWith(
+                                                      color:
+                                                          AirQrTheme.textSecondary(
+                                                            context,
+                                                          ),
+                                                    ),
+                                              ),
+                                            ],
                                           ],
-                                        ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 22),
-                              Container(
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  color: AirQrTheme.primaryButtonSurface(
-                                    context,
-                                  ),
-                                  borderRadius: BorderRadius.circular(999),
+                                  ],
                                 ),
-                                child: Center(
-                                  child: Text(
-                                    AppLocalizations.of(
+                                const SizedBox(height: 24),
+                                Container(
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: AirQrTheme.primaryButtonSurface(
                                       context,
-                                    )!.decoder_tapToSelect,
-                                    style: AirQrTypography.of(context)
-                                        .primaryAction
-                                        .copyWith(
-                                          color:
-                                              AirQrTheme.primaryButtonForeground(
-                                                context,
-                                              ),
-                                        ),
+                                    ),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      AppLocalizations.of(
+                                        context,
+                                      )!.decoder_tapToSelect,
+                                      style: AirQrTypography.of(context)
+                                          .primaryAction
+                                          .copyWith(
+                                            color:
+                                                AirQrTheme.primaryButtonForeground(
+                                                  context,
+                                                ),
+                                          ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                AppLocalizations.of(context)!.decoder_airQrOnlyHint,
-                style: AirQrTypography.of(context).compactStatus.copyWith(
-                  color: AirQrTheme.textSecondary(context),
                 ),
               ),
               const SizedBox(height: 16),
@@ -510,6 +466,7 @@ class _DecoderPageState extends State<DecoderPage> {
                 decoration: BoxDecoration(
                   color: AirQrTheme.card(context),
                   borderRadius: BorderRadius.circular(24),
+                  boxShadow: AirQrTheme.softShadow(context),
                 ),
                 child: Row(
                   children: [
@@ -532,6 +489,8 @@ class _DecoderPageState extends State<DecoderPage> {
                       child: Text(
                         _getLocalizedStatus(context),
                         style: TextStyle(
+                          fontSize: 14,
+                          height: 1.4,
                           color: _error != null
                               ? AirQrTheme.destructive
                               : AirQrTheme.textSecondary(context),
@@ -541,7 +500,7 @@ class _DecoderPageState extends State<DecoderPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
               // Decode Button
               ElevatedButton(
@@ -549,8 +508,8 @@ class _DecoderPageState extends State<DecoderPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AirQrTheme.primaryButtonSurface(context),
                   foregroundColor: AirQrTheme.primaryButtonForeground(context),
-                  disabledBackgroundColor: AirQrTheme.controlSurface(context),
-                  disabledForegroundColor: AirQrTheme.textSecondary(context),
+                  disabledBackgroundColor: AirQrTheme.disabledSurface(context),
+                  disabledForegroundColor: AirQrTheme.disabledText(context),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(999),
@@ -570,15 +529,6 @@ class _DecoderPageState extends State<DecoderPage> {
                         style: AirQrTypography.of(context).primaryAction,
                       ),
               ),
-              const SizedBox(height: 8),
-              TextButton(
-                key: const Key('decoder-try-sample'),
-                onPressed: _isDecoding ? null : _decodeSample,
-                child: Text(
-                  AppLocalizations.of(context)!.decoder_trySample,
-                ),
-              ),
-
               // Guidance for expected non-AirQR GIFs (not a product error)
               if (_guidance != null) ...[
                 const SizedBox(height: 16),

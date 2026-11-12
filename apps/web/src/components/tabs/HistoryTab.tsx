@@ -64,6 +64,7 @@ import {
   visitScanSessionPacketPages,
 } from '@web/services/scanSessionDB';
 import { queueHistoryItem, queueScanComplete, queueScanPacket } from '../../services/scanUploadService';
+import { getScanWebSocketSyncService } from '../../services/scanWebSocketSyncService';
 import {
   getWebSocketSyncService,
   type WebSocketEvent,
@@ -207,6 +208,12 @@ const HistoryTab: React.FC = () => {
   const [historyPreviewChunks, setHistoryPreviewChunks] = useState<string[]>([]);
   const [isOpeningMultiView, setIsOpeningMultiView] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const manualSyncIdsRef = useRef(new Set<string>());
+  const [pendingSyncItemIds, setPendingSyncItemIds] = useState<Set<string>>(new Set());
+  const finishManualSync = (id: string) => {
+    manualSyncIdsRef.current.delete(id);
+    setPendingSyncItemIds(new Set(manualSyncIdsRef.current));
+  };
   const [isClearingHistory, setIsClearingHistory] = useState(false);
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0);
   const historyPreviewDialogTitleId = useId();
@@ -1549,6 +1556,8 @@ const HistoryTab: React.FC = () => {
   };
 
   const handleSyncIncomplete = async (item: IncompleteScanItem) => {
+    const pendingId = `scan:${item.sessionId}`;
+    if (manualSyncIdsRef.current.has(pendingId)) return;
     logger.info('handleSyncIncomplete called', {
       sessionId: item.sessionId,
       uploadEnabled: uploadConfig.enabled,
@@ -1572,6 +1581,8 @@ const HistoryTab: React.FC = () => {
       return;
     }
 
+    manualSyncIdsRef.current.add(pendingId);
+    setPendingSyncItemIds(new Set(manualSyncIdsRef.current));
     try {
       const stored = await getIncompleteScanById(item.sessionId);
       logger.info('Retrieved stored incomplete scan', {
@@ -1590,7 +1601,7 @@ const HistoryTab: React.FC = () => {
         logger.warn('Cannot sync incomplete scan - no packets found', {
           sessionId: item.sessionId,
         });
-        return;
+        throw new Error(t('history.fileUnavailable'));
       }
 
       logger.info('Syncing incomplete scan packets', {
@@ -1624,12 +1635,14 @@ const HistoryTab: React.FC = () => {
               totalChunks,
               chunksSaved,
             },
-            uploadConfig
+            uploadConfig,
+            { replay: true }
           );
         });
       });
 
-      updateIncompleteScan(stripIncompleteScanBuffers({
+      await getScanWebSocketSyncService().waitForPacketsAcknowledged(item.sessionId);
+      const synced = stripIncompleteScanBuffers({
         ...item,
         filename,
         received,
@@ -1639,12 +1652,18 @@ const HistoryTab: React.FC = () => {
         chunksSaved,
         remoteSessionId: item.remoteSessionId || item.sessionId,
         source: item.source ?? 'local',
-      }));
+      });
+      if (stored) await saveIncompleteScan({ ...stored, remoteSessionId: synced.remoteSessionId });
+      updateIncompleteScan(synced);
+      showToast(t('history.itemSynced', { filename }), 'success');
     } catch (error) {
       logger.error('Failed to sync incomplete scan', {
         error: error instanceof Error ? error.message : String(error),
         sessionId: item.sessionId,
       });
+      showToast(t('history.itemSyncFailed', { filename: item.filename }), 'error');
+    } finally {
+      finishManualSync(pendingId);
     }
   };
 
@@ -1898,12 +1917,14 @@ const HistoryTab: React.FC = () => {
     }
   };
 
-  const markItemSynced = async (id: string) => {
+  const markItemSynced = async (id: string, serverId = id) => {
     try {
-      await markHistoryItemAsSynced(id, id);
-      const nextItems = itemsRef.current.map((item) =>
+      await markHistoryItemAsSynced(id, serverId);
+      // Several uploads can acknowledge before React commits the next render.
+      // Read the current store so one acknowledgement cannot erase another.
+      const nextItems = useHistoryStore.getState().items.map((item) =>
         item.id === id
-          ? { ...item, isSynced: true, serverId: id, isLocalOnly: false }
+          ? { ...item, isSynced: true, serverId, isLocalOnly: false, syncFailed: false }
           : item
       );
       setItems(nextItems);
@@ -1912,227 +1933,86 @@ const HistoryTab: React.FC = () => {
         id,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
   };
 
-  const handleSyncItem = async (item: HistoryItem) => {
-    if (!ensureManualHistorySyncReady()) {
+  const handleSyncItem = async (item: HistoryItem, feedback = true, loadedItem?: HistoryItem) => {
+    if (manualSyncIdsRef.current.has(item.id) || !ensureManualHistorySyncReady()) return;
+    if ((item.origin === 'generated' && uploadConfig.syncGenerated === false) ||
+        (item.origin === 'scanned' && uploadConfig.syncScanned === false)) {
+      showToast(t('history.syncCategoryDisabled'), 'warning');
       return;
     }
-
+    manualSyncIdsRef.current.add(item.id);
+    setPendingSyncItemIds(new Set(manualSyncIdsRef.current));
     try {
-      // Re-enable sync for this item and clear any previous failure status
-      await enableSyncForHistoryItem(item.id);
-      if (item.syncFailed) {
-        await clearSyncFailedStatus(item.id);
-        logger.info('Cleared sync failed status for retry', { itemId: item.id });
+      const fullItem = loadedItem ?? await getHistoryItemById(item.id);
+      if (!fullItem?.fileData) throw new Error(t('history.fileUnavailable'));
+      if (fullItem.origin !== 'generated' && fullItem.origin !== 'scanned') {
+        throw new Error(t('history.fileUnavailable'));
       }
-      logger.info('Re-enabled sync for item', { itemId: item.id });
-
-      // Get the item with file data
-      const fullItem = await getHistoryItemById(item.id);
-      if (!fullItem?.fileData) {
-        logger.debug('Cannot sync item - no file data', { itemId: item.id });
-        return;
-      }
-
-      const fileData = fullItem.fileData;
-      const fileSize = getBinaryDataSize(fileData);
-
-      const idTimestamp = parseInt(fullItem.id, 10);
-      const createdAt = !isNaN(idTimestamp) && idTimestamp > 1600000000000
-        ? new Date(idTimestamp).toISOString()
-        : fullItem.date.includes('T')
-          ? fullItem.date
-          : new Date(fullItem.date).toISOString();
-
-      // Callback to mark item as sync failed in both DB and store
-      const handleSyncFailure = async (error: string) => {
-        await markHistoryItemAsSyncFailed(fullItem.id, error);
-        // Update store to show failure state
-        const updatedItem = await getHistoryItemById(fullItem.id);
-        if (updatedItem) {
-          removeItem(fullItem.id);
-          addItem(updatedItem);
+      const remoteId = fullItem.serverId ||
+        (fullItem.origin === 'generated' ? fullItem.remoteHistoryId : fullItem.remoteSessionId) || fullItem.id;
+      const timestamp = resolveHistoryItemSortTimestamp(fullItem);
+      const createdAt = new Date(timestamp || Date.now()).toISOString();
+      const filename = fullItem.mimeType === 'application/zip' ? toZipFilename(fullItem.title) : fullItem.title;
+      await enableSyncForHistoryItem(fullItem.id);
+      if (fullItem.syncFailed) await clearSyncFailedStatus(fullItem.id);
+      removeItem(fullItem.id);
+      addItem({ ...fullItem, isLocalOnly: false, isSynced: false,
+        syncFailed: false, syncFailedAt: undefined });
+      const confirmed = async () => {
+        try {
+          await markItemSynced(fullItem.id, remoteId);
+          if (feedback) showToast(t('history.itemSynced', { filename: fullItem.title }), 'success');
+        } catch {
+          showToast(t('history.syncStateSaveFailed'), 'error');
+        } finally { finishManualSync(fullItem.id); }
+      };
+      const failed = async (error: string) => {
+        try {
+          await markHistoryItemAsSyncFailed(fullItem.id, error);
+          const updated = await getHistoryItemById(fullItem.id);
+          if (updated) { removeItem(fullItem.id); addItem(updated); }
+        } finally {
+          showToast(t('history.itemSyncFailed', { filename: fullItem.title }), 'error');
+          finishManualSync(fullItem.id);
         }
       };
-
-      // Queue for upload with failure handling
-      const uploadFilename =
-        fullItem.mimeType === 'application/zip'
-          ? toZipFilename(fullItem.title)
-          : fullItem.title;
-
       if (fullItem.origin === 'generated') {
-        queueHistoryItem(
-            fileData,
-            {
-              historyId: fullItem.id,
-              title: fullItem.title,
-              filename: uploadFilename,
-              mimeType: fullItem.mimeType,
-              size: fileSize,
-              totalFrames: fullItem.totalFrames,
-              minFrames: fullItem.minFrames,
-            chunkMinFrames: fullItem.chunkMinFrames,
-            createdAt: createdAt,
-            updatedAt: createdAt,
-          },
-          uploadConfig,
-          () => markItemSynced(fullItem.id),
-          handleSyncFailure
-        );
-      } else if (fullItem.origin === 'scanned') {
-        queueScanComplete(
-          fileData,
-          {
-            sessionId: fullItem.id,
-            filename: uploadFilename,
-            mimeType: fullItem.mimeType,
-            completedAt: createdAt,
-          },
-          uploadConfig,
-          () => markItemSynced(fullItem.id),
-          handleSyncFailure
-        );
+        queueHistoryItem(fullItem.fileData, {
+          historyId: remoteId, title: fullItem.title, filename,
+          mimeType: fullItem.mimeType, size: getBinaryDataSize(fullItem.fileData),
+          totalFrames: fullItem.totalFrames, minFrames: fullItem.minFrames,
+          chunkMinFrames: fullItem.chunkMinFrames, createdAt, updatedAt: createdAt,
+        }, uploadConfig, confirmed, failed);
+      } else {
+        queueScanComplete(fullItem.fileData, {
+          sessionId: remoteId, filename, mimeType: fullItem.mimeType, completedAt: createdAt,
+        }, uploadConfig, confirmed, failed);
       }
-
-      logger.info('Queued item for sync', { itemId: item.id });
-
-      // Update the store to reflect the change (isLocalOnly is now false, syncFailed cleared)
-      removeItem(item.id);
-      addItem({
-        ...fullItem,
-        isLocalOnly: false,
-        isSynced: false, // Will become true once server confirms
-        syncFailed: false,
-        syncFailedAt: undefined,
-      });
     } catch (error) {
+      finishManualSync(item.id);
+      showToast(error instanceof Error ? error.message : t('history.syncServerUnavailable'), 'error');
       logger.error('Failed to sync item', { error: error instanceof Error ? error.message : String(error) });
     }
   };
 
   const handleSyncToServer = async () => {
-    if (isSyncing) return;
-    if (!ensureManualHistorySyncReady()) return;
-
+    if (isSyncing || manualSyncIdsRef.current.size > 0 || !ensureManualHistorySyncReady()) return;
     setIsSyncing(true);
     try {
-      // Load all local items from IndexedDB with their file data
       const localItems = await loadHistoryFromIndexedDB();
-      logger.info('Sync started', { count: localItems.length });
-
-      let syncedGenerated = 0;
-      let syncedScanned = 0;
-      let skipped = 0;
-
       for (const item of localItems) {
-        // Skip items that came from server
-        if (item.source === 'server') {
-          skipped++;
-          continue;
-        }
-
-        // Skip items marked as local-only (user explicitly detached from server)
-        if (item.isLocalOnly) {
-          logger.debug('Skipping item - marked as local-only', { itemId: item.id });
-          skipped++;
-          continue;
-        }
-
-        // Skip items that are already synced
-        if (item.isSynced) {
-          logger.debug('Skipping item - already synced', { itemId: item.id });
-          skipped++;
-          continue;
-        }
-
-        // Skip items without file data
-        if (!item.fileData) {
-          logger.debug('Skipping item - no file data', { itemId: item.id });
-          skipped++;
-          continue;
-        }
-
-        const fileData = item.fileData;
-        const fileSize = getBinaryDataSize(fileData);
-
-        const createdAt = resolveHistoryItemSortTimestamp(item);
-
-        logger.debug('Processing item for sync', {
-          origin: item.origin,
-          title: item.title,
-          itemId: item.id,
-          date: createdAt
-        });
-
-        const handleBulkSyncFailure = async (error: string) => {
-          await markHistoryItemAsSyncFailed(item.id, error);
-          const updatedItem = await getHistoryItemById(item.id);
-          if (updatedItem) {
-            removeItem(item.id);
-            addItem(updatedItem);
-          }
-        };
-
-        if (item.origin === 'generated') {
-          const uploadFilename =
-            item.mimeType === 'application/zip'
-              ? toZipFilename(item.title)
-              : item.title;
-          // Use queueHistoryItem for generated items
-          queueHistoryItem(
-            fileData,
-            {
-              historyId: item.id,
-              title: item.title,
-              filename: uploadFilename,
-              mimeType: item.mimeType,
-              size: fileSize,
-              totalFrames: item.totalFrames,
-              minFrames: item.minFrames,
-              chunkMinFrames: item.chunkMinFrames,
-              createdAt: createdAt,
-              updatedAt: createdAt,
-            },
-            uploadConfig,
-            () => markItemSynced(item.id),
-            handleBulkSyncFailure
-          );
-          syncedGenerated++;
-        } else if (item.origin === 'scanned') {
-          const uploadFilename =
-            item.mimeType === 'application/zip'
-              ? toZipFilename(item.title)
-              : item.title;
-          // Use queueScanComplete for scanned items
-          queueScanComplete(
-            fileData,
-            {
-              sessionId: item.id,
-              filename: uploadFilename,
-              mimeType: item.mimeType,
-              completedAt: createdAt,
-            },
-            uploadConfig,
-            () => markItemSynced(item.id),
-            handleBulkSyncFailure
-          );
-          syncedScanned++;
-        }
+        if (item.source === 'server' || item.isLocalOnly || item.isSynced || !item.fileData) continue;
+        // Each callback releases its busy state only after server acknowledgement.
+        await handleSyncItem(item, false, item);
       }
-
-      logger.info('Sync completed', {
-        syncedGenerated,
-        syncedScanned,
-        skipped
-      });
     } catch (error) {
+      showToast(t('history.syncServerUnavailable'), 'error');
       logger.error('Failed to sync history to server', { error: error instanceof Error ? error.message : String(error) });
-    } finally {
-      setIsSyncing(false);
-    }
+    } finally { setIsSyncing(false); }
   };
 
   const handleRefreshHistory = useCallback(() => {
@@ -2484,7 +2364,8 @@ const HistoryTab: React.FC = () => {
         onSyncToServer={handleSyncToServer}
         onRefresh={handleRefreshHistory}
         onClearHistory={handleClearHistory}
-        isSyncing={isSyncing}
+        isSyncing={isSyncing || pendingSyncItemIds.size > 0}
+        pendingSyncItemIds={pendingSyncItemIds}
         isClearingHistory={isClearingHistory}
         syncEnabled={uploadConfig.enabled}
         syncStatusLabel={historySyncStatusBadge.label}

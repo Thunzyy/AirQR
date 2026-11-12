@@ -306,9 +306,11 @@ void main() {
       size: const Size(320, 700),
     );
 
-    const progress = 'Frame: 98765/99999 (Min: 12345)';
+    const progress = '98765 / 99999 (Min Required: 12345)';
     expect(tester.takeException(), isNull);
     final fullscreen = find.byKey(const Key('encoder-gif-fullscreen-action'));
+    await tester.ensureVisible(fullscreen);
+    await tester.pump();
     expect(tester.getSize(fullscreen).height, greaterThanOrEqualTo(40));
     expectContainedInViewport(tester, fullscreen);
     await tester.tap(fullscreen);

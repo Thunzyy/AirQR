@@ -32,7 +32,7 @@ double settingsBottomNavigationClearance(BuildContext context) {
   final scaledLabelHeight = MediaQuery.textScalerOf(context).scale(12);
   final navigationHeight = scaledLabelHeight > 18
       ? 22 + 34 + 4 + (scaledLabelHeight * 1.15 * 2)
-      : 84.0;
+      : 76.0;
   final safeBottom = math.max(MediaQuery.viewPaddingOf(context).bottom, 14.0);
   return navigationHeight + safeBottom + 16;
 }
@@ -813,7 +813,7 @@ class _SettingsPageState extends State<SettingsPage> {
       key: const Key('settings-menu-list'),
       padding: EdgeInsets.fromLTRB(
         16,
-        8,
+        16,
         16,
         settingsBottomNavigationClearance(context),
       ),
@@ -821,8 +821,8 @@ class _SettingsPageState extends State<SettingsPage> {
         Container(
           decoration: BoxDecoration(
             color: _cardBackgroundColor,
-            borderRadius: AirQrRadii.card,
-            border: Border.all(color: _subtleBorderColor),
+            borderRadius: BorderRadius.circular(34),
+            boxShadow: AirQrTheme.softShadow(context),
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -857,7 +857,7 @@ class _SettingsPageState extends State<SettingsPage> {
       key: const Key('settings-detail-list'),
       padding: EdgeInsets.fromLTRB(
         16,
-        8,
+        20,
         16,
         keyboardInset > 0
             ? keyboardInset + 16
@@ -1348,7 +1348,7 @@ class _SettingsMenuRow extends StatelessWidget {
                           fontFamily: 'Manrope',
                           fontSize: 20,
                           height: 1.2,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                           color: textColor,
                         ),
                       ),
@@ -1435,9 +1435,11 @@ class _SettingsDetailHeader extends StatelessWidget {
         Expanded(
           child: Text(
             title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(color: textColor),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: textColor,
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
       ],
