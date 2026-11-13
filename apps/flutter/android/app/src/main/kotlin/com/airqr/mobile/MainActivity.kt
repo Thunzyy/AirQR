@@ -1,4 +1,4 @@
-package com.airqr.pgnrd
+package com.airqr.mobile
 
 import io.flutter.embedding.android.FlutterActivity
 
